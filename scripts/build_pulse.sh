@@ -76,7 +76,8 @@ meson setup "$PA_SRC" . \
     -Ddoxygen=false \
     -Dman=false \
     -Dtests=false \
-    -Ddatabase=simple
+    -Ddatabase=simple \
+    -Dnls=false
 
 log "Compiling PulseAudio..."
 ninja -j"$(nproc)"
