@@ -135,6 +135,7 @@ cd "$WINE_BUILD"
     --without-freetype \
     --without-fontconfig \
     PKG_CONFIG_PATH="$WINE_OUT/lib/pkgconfig" \
+    PKG_CONFIG_LIBDIR="$WINE_OUT/lib/pkgconfig" \
     CPPFLAGS="-I$WINE_OUT/include" \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
 # NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
@@ -149,6 +150,12 @@ cd "$WINE_BUILD"
 # can't see the host's freetype/fontconfig dev files (and Android
 # doesn't ship them either).  Fonts will be loaded from the device's
 # /system/fonts at runtime via Android's Typeface.
+#
+# PKG_CONFIG_LIBDIR: overrides pkg-config's default search path so
+# ONLY our $WINE_OUT/lib/pkgconfig is consulted.  Without this,
+# pkg-config falls back to the host's /usr/lib/x86_64-linux-gnu/pkgconfig
+# and finds Ubuntu's libpulse.pc (x86_64) instead of our stub (arm64) —
+# the cross-compiler then tries to link x86_64 libpulse.so and fails.
 
 log "Compiling Wine (this takes ~25 min on a 16-core box)..."
 make -j"$(nproc)"
