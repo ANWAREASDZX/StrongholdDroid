@@ -132,8 +132,14 @@ cd "$WINE_BUILD"
     --without-alsa \
     --without-oss \
     --without-coreaudio \
-    --without-mingw \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
+# NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
+# cross-compilation for ARM64 targets.  The error message is:
+#   "PE cross-compilation is required for ARM64, please install
+#    clang/llvm-dlltool/lld, or llvm-mingw."
+# Dockerfile.build installs mingw-w64 (provides x86_64-w64-mingw32-gcc)
+# and the NDK ships lld — both should satisfy Wine's PE cross-compile
+# requirements.
 
 log "Compiling Wine (this takes ~25 min on a 16-core box)..."
 make -j"$(nproc)"
