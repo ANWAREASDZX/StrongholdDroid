@@ -60,7 +60,12 @@ RUN mkdir -p /opt/android-sdk && cd /opt/android-sdk \
 ENV ANDROID_NDK_HOME="/opt/android-sdk/ndk/${NDK_VERSION}"
 
 # ---- 3. Python build tools (meson, ninja via pip — newer than apt) -------
-RUN pip3 install --break-system-packages \
+# NOTE: Ubuntu 22.04 ships pip 22.0.2 which pre-dates PEP 668 — the
+# `--break-system-packages` flag (pip 23.0+) is unrecognised and causes
+# `no such option` error. Install to /usr/local/bin via --target to be
+# explicit and forward-compatible with future base-image upgrades.
+RUN python3 -m pip install --upgrade pip==24.3.1 \
+    && pip3 install \
         meson==1.4.0 \
         ninja==1.12.1 \
         cmake==3.30.3
