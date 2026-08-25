@@ -137,7 +137,7 @@ cd "$WINE_BUILD"
     PKG_CONFIG_PATH="$WINE_OUT/lib/pkgconfig" \
     PKG_CONFIG_LIBDIR="$WINE_OUT/lib/pkgconfig" \
     PULSE_CFLAGS="-I$WINE_OUT/include" \
-    PULSE_LIBS="-L$WINE_OUT/lib -lpulse -lpulsecommon" \
+    PULSE_LIBS="-L$WINE_OUT/lib" \
     CPPFLAGS="-I$WINE_OUT/include" \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
 # NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
