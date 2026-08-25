@@ -156,6 +156,14 @@ sed -i "/pulsecore\/sndfile-util\.h/d" "$PA_SRC/src/meson.build"
 # (which is just an optimization for real-time threads).
 sed -i "/cc.has_header_symbol('pthread.h', 'PTHREAD_PRIO_INHERIT')/,/^endif$/d" \
     "$PA_SRC/meson.build"
+# Patch 6: Skip building CLI utilities (pacat, pactl, pasuspender, etc.).
+# src/utils/meson.build unconditionally builds `pacat` and `pactl`
+# executables when get_option('client') is true (and we need client=true
+# for libpulse).  These utilities #include <sndfile.h> which isn't
+# available for Android.  We don't need the utilities — only the
+# libpulse.so client library (used by Wine's pulseaudio driver).
+# Add subdir_done() at the top of src/utils/meson.build to skip it.
+echo 'subdir_done()' > "$PA_SRC/src/utils/meson.build"
 
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
