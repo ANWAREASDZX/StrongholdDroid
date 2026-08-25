@@ -97,8 +97,13 @@ if [[ ! -x "$WINE_NATIVE_BUILD/tools/winebuild/winebuild" ]]; then
         --without-coreaudio \
         --without-mingw
     # Build only the tools subdirectory — much faster than full wine.
-    make -j"$(nproc)" -C tools winebuild wrc wmc widl winegcc
-    make -C tools install
+    # Wine's tools/Makefile has the default target that builds all
+    # tool subdirs (winebuild/winebuild, wrc/wrc, wmc/wmc,
+    # widl/widl, winegcc/winegcc).  No specific target name needed —
+    # just `make -C tools` builds everything in that subdir.
+    # Also: no `make install` — the cross-build with --with-wine-tools
+    # uses the binaries in-place at $WINE_NATIVE_BUILD/tools/*/...
+    make -j"$(nproc)" -C tools
 fi
 
 # Step B: cross-configure for Android using the native tools.
