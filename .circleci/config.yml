@@ -213,3 +213,7 @@ workflows:
               ignore: /.*/
             tags:
               only: /^v\d+\.\d+\.\d+(-[a-z0-9.]+)?$/
+
+# Build verification trigger — $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# This comment is a no-op marker; the only purpose is to create a new git
+# commit on main so CircleCI's GitHub App receives a fresh push event.
