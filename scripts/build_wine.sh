@@ -132,6 +132,8 @@ cd "$WINE_BUILD"
     --without-alsa \
     --without-oss \
     --without-coreaudio \
+    --without-freetype \
+    --without-fontconfig \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
 # NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
 # cross-compilation for ARM64 targets.  The error message is:
@@ -140,6 +142,11 @@ cd "$WINE_BUILD"
 # Dockerfile.build installs mingw-w64 (provides x86_64-w64-mingw32-gcc)
 # and the NDK ships lld — both should satisfy Wine's PE cross-compile
 # requirements.
+#
+# --without-freetype / --without-fontconfig: cross-compile for Android
+# can't see the host's freetype/fontconfig dev files (and Android
+# doesn't ship them either).  Fonts will be loaded from the device's
+# /system/fonts at runtime via Android's Typeface.
 
 log "Compiling Wine (this takes ~25 min on a 16-core box)..."
 make -j"$(nproc)"
