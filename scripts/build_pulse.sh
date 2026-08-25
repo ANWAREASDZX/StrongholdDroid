@@ -136,6 +136,13 @@ sed -i "s|dependency('sndfile', version : '>= 1.0.20')|dependency('sndfile', ver
 # defined, and pulsecore/log.c will skip the backtrace code block
 # entirely (it's wrapped in #ifdef HAVE_EXECINFO_H).
 sed -i "/^  'execinfo.h',$/d" "$PA_SRC/meson.build"
+# Patch 4: Remove sndfile-util.c from libpulsecommon_sources list.
+# Unlike x11 (which is gated by `if x11_dep.found()`), sndfile-util.c
+# is included UNCONDITIONALLY in src/meson.build line 68.  Even with
+# sndfile_dep=required:false, the source file gets compiled and tries
+# to #include <sndfile.h> which isn't available for Android.
+sed -i "/pulsecore\/sndfile-util\.c/d" "$PA_SRC/src/meson.build"
+sed -i "/pulsecore\/sndfile-util\.h/d" "$PA_SRC/src/meson.build"
 
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
@@ -146,6 +153,33 @@ meson setup "$PA_SRC" . \
     -Dman=false \
     -Dtests=false \
     -Ddatabase=simple \
+    -Dx11=disabled \
+    -Dalsa=disabled \
+    -Dasyncns=disabled \
+    -Davahi=disabled \
+    -Dbluez5=disabled \
+    -Ddbus=disabled \
+    -Delogind=disabled \
+    -Dfftw=disabled \
+    -Dglib=disabled \
+    -Dgsettings=disabled \
+    -Dgstreamer=disabled \
+    -Dgtk=disabled \
+    -Dhal-compat=disabled \
+    -Djack=disabled \
+    -Dlirc=disabled \
+    -Dopenssl=disabled \
+    -Dorc=disabled \
+    -Doss-output=disabled \
+    -Dsamplerate=disabled \
+    -Dsoxr=disabled \
+    -Dspeex=disabled \
+    -Dsystemd=disabled \
+    -Dtcpwrap=disabled \
+    -Dudev=disabled \
+    -Dvalgrind=disabled \
+    -Dwebrtc-aec=disabled \
+    -Dadrian-aec=disabled \
     -Dc_args="-I${STUB_DIR}" \
     -Dcpp_args="-I${STUB_DIR}"
 
