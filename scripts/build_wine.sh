@@ -136,6 +136,8 @@ cd "$WINE_BUILD"
     --without-fontconfig \
     PKG_CONFIG_PATH="$WINE_OUT/lib/pkgconfig" \
     PKG_CONFIG_LIBDIR="$WINE_OUT/lib/pkgconfig" \
+    PULSE_CFLAGS="-I$WINE_OUT/include" \
+    PULSE_LIBS="-L$WINE_OUT/lib -lpulse -lpulsecommon" \
     CPPFLAGS="-I$WINE_OUT/include" \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
 # NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
@@ -151,11 +153,16 @@ cd "$WINE_BUILD"
 # doesn't ship them either).  Fonts will be loaded from the device's
 # /system/fonts at runtime via Android's Typeface.
 #
-# PKG_CONFIG_LIBDIR: overrides pkg-config's default search path so
-# ONLY our $WINE_OUT/lib/pkgconfig is consulted.  Without this,
-# pkg-config falls back to the host's /usr/lib/x86_64-linux-gnu/pkgconfig
-# and finds Ubuntu's libpulse.pc (x86_64) instead of our stub (arm64) —
-# the cross-compiler then tries to link x86_64 libpulse.so and fails.
+# PKG_CONFIG_LIBDIR + PULSE_CFLAGS + PULSE_LIBS: Wine's
+# WINE_PACKAGE_FLAGS(PULSE, ...) macro calls pkg-config to get the
+# CFLAGS/LIBS for libpulse, then runs AC_CHECK_LIB with them.
+# Even though AC_CHECK_LIB succeeds (pa_stream_is_corked in -lpulse:
+# yes), Wine also checks that PULSE_LIBS is non-empty — and if
+# pkg-config fails silently (e.g. can't find our .pc or version
+# constraint not satisfied), PULSE_LIBS stays empty and configure
+# aborts with "libpulse development files not found or too old".
+# Setting PULSE_CFLAGS/PULSE_LIBS explicitly bypasses pkg-config
+# entirely and gives Wine the values directly.
 
 log "Compiling Wine (this takes ~25 min on a 16-core box)..."
 make -j"$(nproc)"
