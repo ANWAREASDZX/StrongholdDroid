@@ -143,6 +143,19 @@ sed -i "/^  'execinfo.h',$/d" "$PA_SRC/meson.build"
 # to #include <sndfile.h> which isn't available for Android.
 sed -i "/pulsecore\/sndfile-util\.c/d" "$PA_SRC/src/meson.build"
 sed -i "/pulsecore\/sndfile-util\.h/d" "$PA_SRC/src/meson.build"
+# Patch 5: Remove the PTHREAD_PRIO_INHERIT header-symbol check.
+# Same cross-compile quirk as execinfo.h: meson's
+# cc.has_header_symbol('pthread.h', 'PTHREAD_PRIO_INHERIT') passes
+# because the HOST's pthread.h defines it (glibc).  The cross-compiler
+# finds it via the fallback include path, so HAVE_PTHREAD_PRIO_INHERIT
+# gets defined.  But Android's bionic doesn't declare
+# pthread_mutexattr_setprotocol() at all, so mutex-posix.c fails
+# with "call to undeclared function 'pthread_mutexattr_setprotocol'".
+# Removing the check means HAVE_PTHREAD_PRIO_INHERIT isn't defined,
+# and mutex-posix.c skips the priority-inheritance code path
+# (which is just an optimization for real-time threads).
+sed -i "/cc.has_header_symbol('pthread.h', 'PTHREAD_PRIO_INHERIT')/,/^endif$/d" \
+    "$PA_SRC/meson.build"
 
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
