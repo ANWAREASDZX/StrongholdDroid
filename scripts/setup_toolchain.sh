@@ -69,8 +69,12 @@ log_ok "NDK: $ANDROID_NDK_HOME"
 # ----------------------------------------------------------------------------
 # 2. Cross toolchain symlinks — NDK ships aarch64-linux-android-* directly
 # ----------------------------------------------------------------------------
-export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$(uname -s)-x86_64/bin:$PATH"
-command -v aarch64-linux-android26-clang || die "aarch64 clang not found after NDK install"
+# NDK prebuilt dir uses lowercase OS name: e.g. `linux-x86_64`, not `Linux-x86_64`.
+# `uname -s` returns "Linux" / "Darwin" (capitalized) — must lowercase.
+HOST_TAG="$(uname -s | tr '[:upper:]' '[:lower:]')-x86_64"
+export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/${HOST_TAG}/bin:$PATH"
+command -v aarch64-linux-android26-clang || \
+    die "aarch64 clang not found at $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/${HOST_TAG}/bin — NDK install incomplete?"
 log_ok "aarch64 clang available"
 
 # ----------------------------------------------------------------------------
