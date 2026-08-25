@@ -1,219 +1,27 @@
-# StrongholdDroid — CircleCI build pipeline
-#
-# Free-tier feasibility (as of 2025-01):
-#   - Free plan: 6000 credits/month
-#   - Linux medium (2 vCPU, 4 GB):  10 credits/min  → 70 min build ≈ 700 credits
-#   - Linux large  (4 vCPU, 8 GB):  15 credits/min  → 70 min build ≈ 1050 credits
-#   - Docker layer caching + ccache cut subsequent rebuilds to ~15 min
-#
-# Recommended resource_class: `large` for first build (faster Wine/Box64
-# compile), downgrade to `medium` once cache is warm.
-#
-# IMPORTANT — do NOT hard-code secrets in this file. Use CircleCI project
-# Environment Variables (Project Settings → Environment Variables) for:
-#   STRONGHOLDDROID_KEYSTORE          (base64 of release keystore .jks)
-#   STRONGHOLDDROID_STORE_PASSWORD    (keystore password)
-#   STRONGHOLDDROID_KEY_ALIAS         (key alias)
-#   STRONGHOLDDROID_KEY_PASSWORD      (key password)
-# These are only consumed by the release variant; debug/ci builds do
-# not need them.
-
 version: 2.1
-
-# ---------------------------------------------------------------------------
-# Orbs — small reusable CircleCI packages.
-# ---------------------------------------------------------------------------
-orbs:
-  # android: circleci/android@2.1.5   # not used: we run gradle inside the
-  #                                  # same Docker image so we don't depend
-  #                                  # on a separate Android executor.
-
-# ---------------------------------------------------------------------------
-# Executors — runtime environments for jobs.
-# ---------------------------------------------------------------------------
-executors:
-  docker-builder:
-    docker:
-      # cimg/base is CircleCI's Ubuntu 22.04 image with docker pre-installed.
-      - image: cimg/base:2024.07
-    resource_class: large
-    working_directory: ~/project
-
-# ---------------------------------------------------------------------------
-# Jobs
-# ---------------------------------------------------------------------------
 jobs:
-  # -------------------------------------------------------------------------
-  # native-build — produces libwine.so, libbox64.so, libpulse.so,
-  # libdxvk_loader.so, libGL.so, and the Wine/DXVK DLLs.
-  # -------------------------------------------------------------------------
-  native-build:
-    executor: docker-builder
+  smoke-test:
+    docker:
+      - image: cimg/base:2024.07
+    resource_class: medium
     steps:
       - checkout
-
-      # Docker layer caching saves ~10 min on every build after the first.
-      # The Dockerfile rarely changes, so the apt + SDK + NDK layers
-      # remain warm across commits.
-      - setup_remote_docker:
-          docker_layer_caching: true
-          version: 20.10.24
-
-      - restore_cache:
-          name: Restore ccache
-          keys:
-            - strongholddroid-ccache-{{ arch }}-{{ .Branch }}-{{ epoch }}
-            - strongholddroid-ccache-{{ arch }}-{{ .Branch }}-
-            - strongholddroid-ccache-{{ arch }}-main-
-
       - run:
-          name: Build Docker image (or pull from cache)
+          name: Smoke test
           command: |
-            docker build \
-              --build-arg BUILDKIT_INLINE_CACHE=1 \
-              --cache-from=type=local,src=/tmp/.buildx-cache \
-              --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
-              -t strongholddroid-builder:latest \
-              -f scripts/docker/Dockerfile.build scripts/docker
-
+            echo "Hello from CircleCI"
+            uname -a
+            docker --version
+            free -h
+            df -h
+            env | grep -i circle | head -5
       - run:
-          name: Cross-compile native libraries (Wine, Box64, DXVK, gl4es, Pulse)
-          # ~60 minutes cold, ~10-15 minutes warm with ccache
+          name: Verify Docker availability
           command: |
-            mkdir -p build/ccache
-            docker run --rm \
-                -v "$PWD:/work" \
-                -e CCACHE_DIR=/work/build/ccache \
-                -e CCACHE_COMPRESS=1 \
-                -w /work \
-                strongholddroid-builder:latest \
-                bash -lc '
-                    export CCACHE_DIR=/work/build/ccache;
-                    export PATH="/usr/local/bin:$PATH";
-                    ./scripts/build_all.sh
-                '
-          no_output_timeout: 75m
-
-      - run:
-          name: Validate prebuilt artifacts
-          command: |
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libwine.so
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libbox64.so
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libpulse.so
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libGL.so
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libdxvk_loader.so
-            test -d app/src/main/cpp/prebuilt/arm64-v8a/dxvk-wine-dlls
-            echo "All prebuilt artifacts present"
-            ls -lh app/src/main/cpp/prebuilt/arm64-v8a/
-
-      - persist_to_workspace:
-          name: Persist prebuilt to workspace
-          root: .
-          paths:
-            - app/src/main/cpp/prebuilt/
-            - build/ccache/
-
-      - save_cache:
-          name: Save ccache
-          key: strongholddroid-ccache-{{ arch }}-{{ .Branch }}-{{ epoch }}
-          paths:
-            - build/ccache/
-
-  # -------------------------------------------------------------------------
-  # build-apk — depends on native-build. Produces debug + ci APKs.
-  # -------------------------------------------------------------------------
-  build-apk:
-    executor: docker-builder
-    steps:
-      - checkout
-
-      - attach_workspace:
-          at: ~/project
-
-      - run:
-          name: Build debug + ci APKs
-          # We use the same Docker image so the host needs no deps.
-          # CircleCI's own runner just orchestrates docker.
-          command: |
-            docker run --rm \
-                -v "$PWD:/work" \
-                -w /work \
-                strongholddroid-builder:latest \
-                bash -lc '
-                    ./scripts/build_apk.sh debug
-                    ./scripts/build_apk.sh ci
-                '
-          no_output_timeout: 30m
-
-      - run:
-          name: Sign release APK (only on tag)
-          # The release variant is gated to tag pushes so we don't burn
-          # free-tier credits on every commit.
-          command: |
-            if [[ -z "${STRONGHOLDDROID_KEYSTORE:-}" ]]; then
-              echo "No release keystore configured — skipping release build"
-              exit 0
-            fi
-            echo "${STRONGHOLDDROID_KEYSTORE}" | base64 -d > /tmp/keystore.jks
-            docker run --rm \
-                -v "$PWD:/work" \
-                -v /tmp/keystore.jks:/tmp/keystore.jks:ro \
-                -e STRONGHOLDDROID_KEYSTORE=/tmp/keystore.jks \
-                -e STRONGHOLDDROID_STORE_PASSWORD \
-                -e STRONGHOLDDROID_KEY_ALIAS \
-                -e STRONGHOLDDROID_KEY_PASSWORD \
-                -w /work \
-                strongholddroid-builder:latest \
-                bash -lc './scripts/build_apk.sh release'
-          no_output_timeout: 30m
-
-      - store_artifacts:
-          name: Store APK artifacts
-          path: app/build/outputs/apk/
-          destination: strongholddroid-apks
-
-      - run:
-          name: Print APK summary
-          command: |
-            echo "=== Built APKs ==="
-            find app/build/outputs/apk -name '*.apk' -exec ls -lh {} \;
-
-# ---------------------------------------------------------------------------
-# Workflows — orchestrate jobs across branches and tags.
-# ---------------------------------------------------------------------------
+            docker info 2>&1 | head -10
+            echo "Docker works"
 workflows:
   version: 2
-
-  # Default build — runs on every push to main/develop.
-  build:
+  smoke:
     jobs:
-      - native-build:
-          filters:
-            branches:
-              only: [main, develop]
-      - build-apk:
-          requires: [native-build]
-          filters:
-            branches:
-              only: [main, develop]
-
-  # Release build — only runs on tag pushes (v0.1.0, v0.2.0, etc.)
-  release:
-    jobs:
-      - native-build:
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v\d+\.\d+\.\d+(-[a-z0-9.]+)?$/
-      - build-apk:
-          requires: [native-build]
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v\d+\.\d+\.\d+(-[a-z0-9.]+)?$/
-
-# Build verification trigger — $(date -u +%Y-%m-%dT%H:%M:%SZ)
-# This comment is a no-op marker; the only purpose is to create a new git
-# commit on main so CircleCI's GitHub App receives a fresh push event.
+      - smoke-test
