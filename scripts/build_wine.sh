@@ -139,7 +139,15 @@ cd "$WINE_BUILD"
     PULSE_CFLAGS="-I$WINE_OUT/include" \
     PULSE_LIBS="-L$WINE_OUT/lib" \
     CPPFLAGS="-I$WINE_OUT/include" \
-    LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
+    LDFLAGS="-L$WINE_OUT/lib -static-libstdc++" \
+    DLLTOOL=llvm-dlltool
+# DLLTOOL=llvm-dlltool: Wine's winebuild tool looks for `dlltool` in PATH
+# to create PE import libraries (.a) from .spec files.  Ubuntu's
+# mingw-w64-tools provides `x86_64-w64-mingw32-dlltool` (x86_64 target)
+# but no `dlltool` or `aarch64-w64-mingw32-dlltool` (aarch64 target).
+# The NDK ships `llvm-dlltool` at $ANDROID_NDK_HOME/toolchains/llvm/
+# prebuilt/linux-x86_64/bin/ — which IS in PATH after setup_toolchain.sh.
+# Setting DLLTOOL env var tells winebuild to use it explicitly.
 # NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
 # cross-compilation for ARM64 targets.  The error message is:
 #   "PE cross-compilation is required for ARM64, please install
