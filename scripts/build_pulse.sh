@@ -68,6 +68,19 @@ log "Configuring PulseAudio (meson)..."
 #                                    atomics so this option is unused.
 #   -Dstream-restore=true          — not a real meson option; stream-restore
 #                                    is a *module name*, not a build flag.
+#   -Dnls=false                    — not a real meson option in
+#                                    pulseaudio v16.1 (the meson_options.txt
+#                                    has no 'nls' option).
+#
+# Patch: PulseAudio's meson.build line 377 does
+#   libintl_dep = cc.find_library('intl')
+# unconditionally when `dgettext` isn't in libc (which is the case for
+# Android's bionic).  Patch it to `required: false` so the build doesn't
+# fail when libintl isn't available — dgettext just becomes a no-op,
+# English strings are returned as-is, which is fine for our stub lib.
+sed -i "s|cc\.find_library('intl')|cc.find_library('intl', required: false)|g" \
+    "$PA_SRC/meson.build"
+
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
     --default-library=shared \
@@ -76,8 +89,7 @@ meson setup "$PA_SRC" . \
     -Ddoxygen=false \
     -Dman=false \
     -Dtests=false \
-    -Ddatabase=simple \
-    -Dnls=false
+    -Ddatabase=simple
 
 log "Compiling PulseAudio..."
 ninja -j"$(nproc)"
