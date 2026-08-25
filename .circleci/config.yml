@@ -84,25 +84,37 @@ jobs:
 
       - run:
           name: Cross-compile native libraries (Wine, Box64, DXVK, gl4es, Pulse)
-          # ~60 minutes cold, ~10-15 minutes warm with ccache
+          # ~60 minutes cold, ~10-15 minutes warm with ccache.
+          #
+          # IMPORTANT: CircleCI's `setup_remote_docker` provisions the
+          # Docker daemon on a SEPARATE VM from the build runner. Bind
+          # mounts like `-v $PWD:/work` DON'T WORK because the runner's
+          # filesystem isn't visible to the daemon VM. We use the
+          # `docker create` + `docker cp` + `docker start` pattern
+          # instead — this works with remote Docker and preserves
+          # execute bits on shell scripts.
           command: |
-            set -x
-            echo "=== Host PWD: $PWD ==="
-            ls -la scripts/ | head -20
-            mkdir -p build/ccache
-            docker run --rm \
-                -v "$PWD:/work" \
+            set -ex
+            mkdir -p build/ccache app/src/main/cpp/prebuilt
+            # 1) Create a stopped container with the build entrypoint.
+            docker create \
+                --name native-builder \
                 -e CCACHE_DIR=/work/build/ccache \
                 -e CCACHE_COMPRESS=1 \
                 -w /work \
                 strongholddroid-builder:latest \
-                bash -c '
-                    set -ex
-                    echo "=== Container CWD: $(pwd) ==="
-                    ls -la /work/scripts/ | head -20
-                    test -x /work/scripts/build_all.sh || chmod +x /work/scripts/build_all.sh
-                    /work/scripts/build_all.sh
-                '
+                bash -c 'chmod +x /work/scripts/*.sh && /work/scripts/build_all.sh'
+            # 2) Copy project source into the container (excludes .git).
+            tar --exclude='.git' --exclude='build/ccache' -cf - . \
+              | docker cp - native-builder:/work/
+            # 3) Run the build (stream stdout/stderr to console).
+            docker start -a native-builder
+            # 4) Extract artifacts back to the runner for downstream steps.
+            docker cp native-builder:/work/app/src/main/cpp/prebuilt/. ./app/src/main/cpp/prebuilt/
+            docker cp native-builder:/work/build/ccache/. ./build/ccache/
+            # 5) Clean up.
+            docker rm native-builder
+            ls -lh app/src/main/cpp/prebuilt/arm64-v8a/ | head -20
           no_output_timeout: 75m
 
       - run:
@@ -143,39 +155,51 @@ jobs:
 
       - run:
           name: Build debug + ci APKs
-          # We use the same Docker image so the host needs no deps.
-          # CircleCI's own runner just orchestrates docker.
+          # Same `docker create + cp + start` pattern as native-build —
+          # see that job for the rationale (remote Docker doesn't see
+          # the runner's filesystem).
           command: |
-            docker run --rm \
-                -v "$PWD:/work" \
+            set -ex
+            docker create \
+                --name apk-builder \
                 -w /work \
                 strongholddroid-builder:latest \
-                bash -lc '
-                    ./scripts/build_apk.sh debug
-                    ./scripts/build_apk.sh ci
-                '
+                bash -c 'chmod +x /work/scripts/*.sh && /work/scripts/build_apk.sh debug && /work/scripts/build_apk.sh ci'
+            tar --exclude='.git' --exclude='build/ccache' -cf - . \
+              | docker cp - apk-builder:/work/
+            docker start -a apk-builder
+            docker cp apk-builder:/work/app/build/outputs/apk/. ./app/build/outputs/apk/
+            docker rm apk-builder
           no_output_timeout: 30m
 
       - run:
           name: Sign release APK (only on tag)
           # The release variant is gated to tag pushes so we don't burn
-          # free-tier credits on every commit.
+          # free-tier credits on every commit. Same create+cp+start pattern.
+          # NOTE: keystore file is also copied via `docker cp` (not bind
+          # mounted) for the same remote-Docker reason.
           command: |
             if [[ -z "${STRONGHOLDDROID_KEYSTORE:-}" ]]; then
               echo "No release keystore configured — skipping release build"
               exit 0
             fi
+            set -ex
             echo "${STRONGHOLDDROID_KEYSTORE}" | base64 -d > /tmp/keystore.jks
-            docker run --rm \
-                -v "$PWD:/work" \
-                -v /tmp/keystore.jks:/tmp/keystore.jks:ro \
+            docker create \
+                --name apk-release \
                 -e STRONGHOLDDROID_KEYSTORE=/tmp/keystore.jks \
                 -e STRONGHOLDDROID_STORE_PASSWORD \
                 -e STRONGHOLDDROID_KEY_ALIAS \
                 -e STRONGHOLDDROID_KEY_PASSWORD \
                 -w /work \
                 strongholddroid-builder:latest \
-                bash -lc './scripts/build_apk.sh release'
+                bash -c 'chmod +x /work/scripts/*.sh && /work/scripts/build_apk.sh release'
+            tar --exclude='.git' --exclude='build/ccache' -cf - . \
+              | docker cp - apk-release:/work/
+            docker cp /tmp/keystore.jks apk-release:/tmp/keystore.jks
+            docker start -a apk-release
+            docker cp apk-release:/work/app/build/outputs/apk/. ./app/build/outputs/apk/
+            docker rm apk-release
           no_output_timeout: 30m
 
       - store_artifacts:
