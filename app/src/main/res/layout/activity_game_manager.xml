@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- Wine renders into the surface below via SurfaceView's Surface. -->
+    <SurfaceView
+        android:id="@+id/wineSurface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <!-- RTS overlay floats on top and forwards input to Wine via InputBridge. -->
+    <com.strongholddroid.emulator.controls.RtsControlOverlay
+        android:id="@+id/rtsOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+</FrameLayout>

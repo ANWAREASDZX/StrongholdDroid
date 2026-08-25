@@ -1,0 +1,19 @@
+{
+  "slug": "stronghold_crusader_extreme",
+  "displayName": "Stronghold Crusader Extreme (2014)",
+  "versionString": "1.4-E",
+  "versionYear": 2014,
+  "graphicsApi": "DIRECT_X_9_EX",
+  "nativeResolution": [1920, 1080],
+  "aspectRatio": 1.7777778,
+  "gameExecutable": "C:\\Stronghold Crusader Extreme\\Stronghold_Crusader_Extreme.exe",
+  "gogId": 1207661971,
+  "steamAppId": 1127901,
+  "installSizeMb": 1700,
+  "musicFile": "C:\\Stronghold Crusader Extreme\\music",
+  "saveStateSlots": 10,
+  "knownIssues": [
+    "Larger unit counts (>5000) may exceed the Wine 6.0 dsound voices limit; see Troubleshooting → Audio → Missing SFX",
+    "Bumps VRAM usage to ~512 MB; ensure DynamicResolution.minScale=0.6"
+  ]
+}

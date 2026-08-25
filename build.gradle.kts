@@ -1,0 +1,8 @@
+// Top-level build file for StrongholdDroid
+// Plugin versions are pinned here for reproducible builds across CI and local dev.
+plugins {
+    id("com.android.application") version "8.5.2" apply false
+    id("com.android.library") version "8.5.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+    id("org.jetbrains.kotlin.plugin.parcelize") version "1.9.24" apply false
+}

@@ -1,0 +1,158 @@
+name: Build StrongholdDroid
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '17'
+  NDK_VERSION: '26.1.10909125'
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Native build — produces libwine.so, libbox64.so, libdxvk_loader.so,
+  # libpulse.so, libGL.so, etc. as an artifact consumed by the APK job.
+  # Runs inside the project's own Docker image so the host needs no deps.
+  # -----------------------------------------------------------------------
+  native-build:
+    name: Build native libs (arm64-v8a)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Cache Docker layer
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-${{ runner.os }}-${{ hashFiles('scripts/docker/Dockerfile.build') }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: scripts/docker
+          file: scripts/docker/Dockerfile.build
+          tags: strongholddroid-builder:latest
+          load: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to:   type=local,dest=/tmp/.buildx-cache
+
+      - name: Cache native build (ccache)
+        uses: actions/cache@v4
+        with:
+          path: build/ccache
+          key: ccache-arm64-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-arm64-${{ runner.os }}-
+
+      - name: Run build_all.sh
+        run: |
+          docker run --rm \
+              -v "$PWD:/work" \
+              -e CCACHE_DIR=/work/build/ccache \
+              -w /work \
+              strongholddroid-builder:latest \
+              bash -lc 'export CCACHE_DIR=/work/build/ccache; ./scripts/build_all.sh'
+
+      - name: Validate prebuilt artifacts
+        run: |
+          test -f app/src/main/cpp/prebuilt/arm64-v8a/libwine.so
+          test -f app/src/main/cpp/prebuilt/arm64-v8a/libbox64.so
+          test -f app/src/main/cpp/prebuilt/arm64-v8a/libpulse.so
+          test -f app/src/main/cpp/prebuilt/arm64-v8a/libGL.so
+          test -f app/src/main/cpp/prebuilt/arm64-v8a/libdxvk_loader.so
+          test -d app/src/main/cpp/prebuilt/arm64-v8a/dxvk-wine-dlls
+          ls -lh app/src/main/cpp/prebuilt/arm64-v8a/
+
+      - name: Upload prebuilt
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-arm64
+          path: app/src/main/cpp/prebuilt/
+          retention-days: 30
+
+  # -----------------------------------------------------------------------
+  # APK build — depends on native-build; produces debug/ci/release APKs.
+  # -----------------------------------------------------------------------
+  apk-build:
+    name: Build APK (${{ matrix.variant }})
+    needs: native-build
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [debug, ci]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Download prebuilt libs
+        uses: actions/download-artifact@v4
+        with:
+          name: prebuilt-arm64
+          path: app/src/main/cpp/prebuilt
+
+      - name: Assemble APK (${{ matrix.variant }})
+        run: ./scripts/build_apk.sh ${{ matrix.variant }}
+        env:
+          STRONGHOLDDROID_KEYSTORE:           ${{ secrets.KEYSTORE_BASE64 && '/tmp/keystore.jks' || '' }}
+          STRONGHOLDDROID_STORE_PASSWORD:    ${{ secrets.STORE_PASSWORD }}
+          STRONGHOLDDROID_KEY_ALIAS:         ${{ secrets.KEY_ALIAS }}
+          STRONGHOLDDROID_KEY_PASSWORD:      ${{ secrets.KEY_PASSWORD }}
+
+      - name: Decode keystore (release-only)
+        if: matrix.variant == 'release' && secrets.KEYSTORE_BASE64 != ''
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > /tmp/keystore.jks
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: strongholddroid-${{ matrix.variant }}
+          path: app/build/outputs/apk/${{ matrix.variant }}/*.apk
+          retention-days: 14
+
+  # -----------------------------------------------------------------------
+  # Release job — only runs on tag pushes. Attaches the APK to a draft
+  # GitHub Release.
+  # -----------------------------------------------------------------------
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: apk-build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download CI APK
+        uses: actions/download-artifact@v4
+        with:
+          name: strongholddroid-ci
+          path: artifacts/
+
+      - name: Rename for release
+        run: |
+          mv artifacts/*.apk StrongholdDroid-${GITHUB_REF_NAME}.apk
+          ls -lh StrongholdDroid-${GITHUB_REF_NAME}.apk
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: StrongholdDroid ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            StrongholdDroid-${{ github.ref_name }}.apk

@@ -1,0 +1,18 @@
+# Binaries / build artifacts
+build/
+/app/src/main/cpp/prebuilt/
+/.gradle/
+*.iml
+/.idea/
+local.properties
+/captures/
+.cxx/
+
+# OS clutter
+.DS_Store
+Thumbs.db
+
+# Logs / crash dumps
+crashes/
+*.log
+worklog.local.md

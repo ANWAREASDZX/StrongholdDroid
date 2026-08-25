@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/cat_graphics">
+
+        <SwitchPreferenceCompat
+            app:key="graphics_dxvk_vulkan"
+            app:defaultValue="true"
+            app:title="@string/pref_dxvk_vulkan_title"
+            app:summary="@string/pref_dxvk_vulkan_summary" />
+
+        <SwitchPreferenceCompat
+            app:key="graphics_gl4es"
+            app:defaultValue="false"
+            app:title="@string/pref_gl4es_title"
+            app:summary="@string/pref_gl4es_summary" />
+
+        <SeekBarPreference
+            app:key="graphics_target_fps"
+            app:defaultValue="30"
+            android:max="60"
+            app:title="@string/pref_target_fps_title"
+            app:showSeekBarValue="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/cat_performance">
+
+        <SwitchPreferenceCompat
+            app:key="performance_dynamic_resolution"
+            app:defaultValue="true"
+            app:title="@string/pref_dynres_title"
+            app:summary="@string/pref_dynres_summary" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/cat_controls">
+
+        <SeekBarPreference
+            app:key="controls_mouse_sensitivity"
+            app:defaultValue="100"
+            android:max="500"
+            app:title="@string/pref_mouse_sensitivity_title"
+            app:showSeekBarValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="controls_edge_scroll"
+            app:defaultValue="true"
+            app:title="@string/pref_edge_scroll_title" />
+
+        <SwitchPreferenceCompat
+            app:key="controls_drag_lock"
+            app:defaultValue="true"
+            app:title="@string/pref_drag_lock_title"
+            app:summary="@string/pref_drag_lock_summary" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/cat_diagnostics">
+
+        <Preference
+            app:key="diag_verify_binaries"
+            app:title="@string/pref_verify_binaries_title" />
+
+        <Preference
+            app:key="diag_box64_selftest"
+            app:title="@string/pref_box64_selftest_title" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -1,0 +1,17 @@
+{
+  "slug": "stronghold_crusader_v11",
+  "displayName": "Stronghold Crusader (2002)",
+  "versionString": "1.1",
+  "versionYear": 2002,
+  "graphicsApi": "DIRECT_X_7",
+  "nativeResolution": [1024, 768],
+  "aspectRatio": 1.3333334,
+  "gameExecutable": "C:\\Stronghold Crusader\\Stronghold_Crusader.exe",
+  "installSizeMb": 850,
+  "musicFile": "C:\\Stronghold Crusader\\music",
+  "saveStateSlots": 10,
+  "knownIssues": [
+    "DirectDraw surface lock may fail on Adreno drivers that don't expose GL_EXT_unpack_subimage — fall back to wined3d-software",
+    "Palette animation in 8-bit surface mode requires ARB_palette_texture"
+  ]
+}

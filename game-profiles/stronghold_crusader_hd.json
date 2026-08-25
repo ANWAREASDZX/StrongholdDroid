@@ -1,0 +1,18 @@
+{
+  "slug": "stronghold_crusader_hd",
+  "displayName": "Stronghold Crusader HD (2014)",
+  "versionString": "1.4-HD",
+  "versionYear": 2014,
+  "graphicsApi": "DIRECT_X_9",
+  "nativeResolution": [1920, 1080],
+  "aspectRatio": 1.7777778,
+  "gameExecutable": "C:\\Stronghold Crusader HD\\Stronghold_CrusaderHD.exe",
+  "gogId": 1207661970,
+  "steamAppId": 1127900,
+  "installSizeMb": 1500,
+  "musicFile": "C:\\Stronghold Crusader HD\\music",
+  "saveStateSlots": 10,
+  "knownIssues": [
+    "DXVK 2.x occasionally shows a 1-frame rendering glitch when rotating the camera by 90° — fixed by setting dxgi.maxFrameLatency = 1"
+  ]
+}

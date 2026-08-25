@@ -1,0 +1,16 @@
+## Template for local.properties — copy to `local.properties` and adjust.
+## DO NOT COMMIT the real local.properties file.
+
+# Absolute path to the Android SDK on this machine.
+sdk.dir=/home/user/Android/Sdk
+
+# Optional: NDK version override (defaults to the version pinned in gradle.properties).
+# ndk.dir=/home/user/Android/Sdk/ndk/26.1.10909125
+
+# Path to the prebuilt native libraries (libwine, libbox64, libdxvk-loader, libgl4es, libpulse).
+# These are produced by scripts/build_all.sh and placed in app/src/main/cpp/prebuilt/<abi>/.
+native.prebuilt.dir=/home/user/strongholddroid-prebuilt
+
+# Path to DXVK winelib-style DLLs (d3d9.dll, d3d11.dll, dxgi.dll, ddraw.dll) that will be
+# bundled into the per-container WINEPREFIX's system32 / syswow64.
+dxvk.dll.dir=/home/user/strongholddroid-prebuilt/dxvk-wine-dlls

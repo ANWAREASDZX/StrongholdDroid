@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StrongholdDroid</string>
+    <string name="settings_title">الإعدادات</string>
+
+    <!-- Tabs -->
+    <string name="tab_library">المكتبة</string>
+    <string name="tab_performance">الأداء</string>
+    <string name="tab_settings">الإعدادات</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_name">StrongholdDroid Runtime</string>
+    <string name="notification_channel_desc">يعرض حالة تشغيل المحاكي أثناء استخدام تطبيقات أخرى.</string>
+    <string name="notification_running">المحاكي يعمل في الخلفية…</string>
+
+    <!-- Common -->
+    <string name="press_back_again_to_quit">اضغط زر الرجوع مرة أخرى للخروج</string>
+    <string name="about_text">StrongholdDroid v%1$s — محاكي Stronghold Crusader لأجهزة أندرويد بمعمارية ARM64.</string>
+
+    <!-- Game Manager -->
+    <string name="launch_button">تشغيل</string>
+    <string name="save_state_now">حفظ الحالة الآن</string>
+    <string name="fps_label">FPS</string>
+    <string name="thermal_label">الحرارة</string>
+
+    <!-- Settings categories -->
+    <string name="cat_graphics">الرسوميات</string>
+    <string name="cat_performance">الأداء</string>
+    <string name="cat_controls">التحكم</string>
+    <string name="cat_diagnostics">التشخيص</string>
+
+    <string name="pref_dxvk_vulkan_title">DXVK (Vulkan)</string>
+    <string name="pref_dxvk_vulkan_summary">المسار الأمثل للعبة SC HD / Extreme — يترجم DirectX 9 إلى Vulkan.</string>
+    <string name="pref_gl4es_title">gl4es (OpenGL ES)</string>
+    <string name="pref_gl4es_summary">للأجهزة الضعيفة — يترجم DirectX 7/9 إلى OpenGL ES 3.x.</string>
+    <string name="pref_dynres_title">تحجيم ديناميكي للدقة</string>
+    <string name="pref_dynres_summary">خفض الدقة تلقائياً عند انخفاض FPS للحفاظ على استقرار اللعبة.</string>
+    <string name="pref_target_fps_title">الإطار المستهدف</string>
+    <string name="pref_mouse_sensitivity_title">حساسية الماوس الافتراضي</string>
+    <string name="pref_edge_scroll_title">التمرير عند حواف الشاشة</string>
+    <string name="pref_drag_lock_title">قفل السحب</string>
+    <string name="pref_drag_lock_summary">ترجمة الضغطة القصيرة + سحب إلى LMB-مستمر لتحديد الوحدات.</string>
+
+    <string name="pref_verify_binaries_title">تحقق من وجود الباينري</string>
+    <string name="pref_box64_selftest_title">اختبار box64 الذاتي</string>
+</resources>

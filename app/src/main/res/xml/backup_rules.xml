@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="file" path="control_profiles/"/>
+    <include domain="file" path="game_profiles/"/>
+    <include domain="file" path="saves/"/>
+    <exclude domain="file" path="prefixes/"/>
+    <exclude domain="file" path="crashes/"/>
+</full-backup-content>

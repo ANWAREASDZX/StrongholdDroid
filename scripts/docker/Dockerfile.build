@@ -1,0 +1,72 @@
+# StrongholdDroid Build Environment
+#
+# Reproducible build container for Wine + Box64 + DXVK + gl4es.
+# CI uses this image so local and cloud builds produce bit-identical
+# artifacts.
+#
+# Image base: Ubuntu 22.04 LTS x86_64 (matches Wine's CI matrix).
+#
+# To build locally:
+#   docker build -t strongholddroid-builder scripts/docker/
+#
+# To run a build inside the container:
+#   docker run --rm -v $(pwd):/work strongholddroid-builder \
+#       /work/scripts/build_all.sh
+#
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    ANDROID_HOME=/opt/android-sdk \
+    NDK_VERSION=26.1.10909125
+
+# ---- 1. Apt dependencies for the host-side toolchain -----------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        bison flex \
+        git wget curl unzip \
+        python3 python3-pip python3-venv \
+        mingw-w64 mingw-w64-tools \
+        cmake ninja-build pkg-config patchelf \
+        libfreetype6-dev libfreetype-dev \
+        libx11-dev libxext-dev libxcomposite-dev libxrandr-dev \
+        libxrender-dev libxcursor-dev libxinerama-dev libxi-dev \
+        libxfixes-dev libxxf86vm-dev libxv-dev \
+        libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+        libpulse-dev libasound2-dev \
+        openjdk-17-jdk-headless \
+        locales \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="${PATH}:/usr/lib/jvm/java-17-openjdk-amd64/bin:/root/.local/bin:/opt/android-sdk/cmdline-tools/latest/bin"
+
+# ---- 2. Android SDK + NDK -------------------------------------------------
+RUN mkdir -p /opt/android-sdk && cd /opt/android-sdk \
+    && wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O /tmp/cmdtools.zip \
+    && unzip -q /tmp/cmdtools.zip -d /opt/android-sdk/ \
+    && mv /opt/android-sdk/cmdline-tools /opt/android-sdk/cmdline-tools-tmp \
+    && mkdir -p /opt/android-sdk/cmdline-tools/latest \
+    && mv /opt/android-sdk/cmdline-tools-tmp/* /opt/android-sdk/cmdline-tools/latest/ \
+    && rmdir /opt/android-sdk/cmdline-tools-tmp \
+    && rm /tmp/cmdtools.zip \
+    && yes | sdkmanager --licenses > /dev/null \
+    && yes | sdkmanager "platform-tools" "platforms;android-34" \
+                       "ndk;${NDK_VERSION}" "cmake;3.22.1"
+
+ENV ANDROID_NDK_HOME="/opt/android-sdk/ndk/${NDK_VERSION}"
+
+# ---- 3. Python build tools (meson, ninja via pip — newer than apt) -------
+RUN pip3 install --break-system-packages \
+        meson==1.4.0 \
+        ninja==1.12.1 \
+        cmake==3.30.3
+
+# ---- 4. Project working dir -----------------------------------------------
+WORKDIR /work
+
+# Default entrypoint: drop into a shell for interactive debugging
+CMD ["/bin/bash"]

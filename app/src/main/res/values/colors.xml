@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette — medieval parchment meets modern Android -->
+    <color name="brand_primary">#A0522D</color>
+    <color name="brand_primary_dark">#6B3410</color>
+    <color name="brand_accent">#F4A460</color>
+    <color name="brand_background">#1A1614</color>
+    <color name="brand_surface">#262220</color>
+
+    <color name="text_primary">#EFEFEF</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="text_disabled">#707070</color>
+
+    <color name="status_ok">#4CAF50</color>
+    <color name="status_warn">#FFC107</color>
+    <color name="status_error">#E53935</color>
+
+    <color name="overlay_transparent">#00000000</color>
+    <color name="overlay_button_bg">#A0303030</color>
+    <color name="overlay_cursor">#CCFFFFFF</color>
+    <color name="overlay_cursor_ring">#77000000</color>
+</resources>
