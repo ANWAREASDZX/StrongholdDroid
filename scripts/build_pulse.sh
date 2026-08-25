@@ -57,6 +57,37 @@ cpu = 'aarch64'
 endian = 'little'
 EOF
 
+# Stub libintl.h — Android's bionic libc has no gettext/libintl.
+# PulseAudio's i18n.h unconditionally does #include <libintl.h>.
+# Provide a header that inlines gettext/dgettext/etc. as identity
+# functions (return input string unchanged) — translation isn't
+# needed for our stub libpulse.so used by Wine's pulseaudio driver
+# for IPC over a FIFO.
+STUB_DIR="$PA_BUILD/stubs"
+mkdir -p "$STUB_DIR"
+cat > "$STUB_DIR/libintl.h" <<'EOF'
+/* Stub libintl.h for Android cross-compile. */
+#ifndef STRONGHOLDDROID_LIBINTL_STUB
+#define STRONGHOLDDROID_LIBINTL_STUB
+#ifdef __cplusplus
+extern "C" {
+#endif
+static inline const char *gettext(const char *msgid) { return msgid; }
+static inline const char *dgettext(const char *domainname, const char *msgid) { (void)domainname; return msgid; }
+static inline const char *dcgettext(const char *domainname, const char *msgid, int category) { (void)domainname; (void)category; return msgid; }
+static inline const char *ngettext(const char *msgid1, const char *msgid2, unsigned long n) { return (n == 1) ? msgid1 : msgid2; }
+static inline const char *dngettext(const char *domainname, const char *msgid1, const char *msgid2, unsigned long n) { (void)domainname; return (n == 1) ? msgid1 : msgid2; }
+static inline const char *dcngettext(const char *domainname, const char *msgid1, const char *msgid2, unsigned long n, int category) { (void)domainname; (void)category; return (n == 1) ? msgid1 : msgid2; }
+static inline const char *bindtextdomain(const char *domainname, const char *dirname) { (void)dirname; return domainname; }
+static inline const char *bind_textdomain_codeset(const char *domainname, const char *codeset) { (void)codeset; return domainname; }
+static inline const char *textdomain(const char *domainname) { return domainname ? domainname : "messages"; }
+static inline const char *setlocale(int category, const char *locale) { (void)category; return locale; }
+#ifdef __cplusplus
+}
+#endif
+#endif
+EOF
+
 log "Configuring PulseAudio (meson)..."
 # PulseAudio v16.1 meson_options.txt — valid options we use:
 #   -Ddaemon=false        — we don't ship a daemon, only the client lib
@@ -104,7 +135,9 @@ meson setup "$PA_SRC" . \
     -Ddoxygen=false \
     -Dman=false \
     -Dtests=false \
-    -Ddatabase=simple
+    -Ddatabase=simple \
+    -Dc_args="-I${STUB_DIR}" \
+    -Dcpp_args="-I${STUB_DIR}"
 
 log "Compiling PulseAudio..."
 ninja -j"$(nproc)"
