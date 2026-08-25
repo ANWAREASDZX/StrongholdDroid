@@ -165,7 +165,7 @@ meson setup "$PA_SRC" . \
     -Dgsettings=disabled \
     -Dgstreamer=disabled \
     -Dgtk=disabled \
-    -Dhal-compat=disabled \
+    -Dhal-compat=false \
     -Djack=disabled \
     -Dlirc=disabled \
     -Dopenssl=disabled \
@@ -179,7 +179,7 @@ meson setup "$PA_SRC" . \
     -Dudev=disabled \
     -Dvalgrind=disabled \
     -Dwebrtc-aec=disabled \
-    -Dadrian-aec=disabled \
+    -Dadrian-aec=false \
     -Dc_args="-I${STUB_DIR}" \
     -Dcpp_args="-I${STUB_DIR}"
 
