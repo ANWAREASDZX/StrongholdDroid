@@ -223,6 +223,15 @@ install_lib "$PA_BUILD/src/pulse/libpulse.so.0.*" "libpulse.so.0" || true
 install_lib "$PA_BUILD/src/pulse/libpulse-simple.so.0.*" "libpulse-simple.so.0" || true
 install_lib "$PA_BUILD/src/pulse/libpulsecommon-*.so" "libpulsecommon.so" || true
 
+# Create linker-friendly symlinks (libpulse.so → libpulse.so.0).
+# Wine's configure runs `cc ... -lpulse` which only finds libpulse.so
+# or libpulse.a, NOT libpulse.so.0.  Without these symlinks, the link
+# check fails with "pa_stream_is_corked in -lpulse... no".
+PULSE_LIB_DIR="$PREBUILT_DIR/arm64-v8a/lib"
+[[ -f "$PULSE_LIB_DIR/libpulse.so.0" ]] && ln -sf libpulse.so.0 "$PULSE_LIB_DIR/libpulse.so"
+[[ -f "$PULSE_LIB_DIR/libpulse-simple.so.0" ]] && ln -sf libpulse-simple.so.0 "$PULSE_LIB_DIR/libpulse-simple.so"
+[[ -f "$PULSE_LIB_DIR/libpulsecommon.so" ]] && ln -sf libpulsecommon.so "$PULSE_LIB_DIR/libpulsecommon.so.0"
+
 # Install public headers + a pkg-config file so Wine's configure
 # can find libpulse via `pkg-config --cflags --libs libpulse`.
 mkdir -p "$PREBUILT_DIR/arm64-v8a/include/pulse" \
