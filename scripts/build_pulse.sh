@@ -125,6 +125,17 @@ sed -i "s|cc\.find_library('intl')|cc.find_library('intl', required: false)|g" \
     "$PA_SRC/meson.build"
 sed -i "s|dependency('sndfile', version : '>= 1.0.20')|dependency('sndfile', version : '>= 1.0.20', required: false)|g" \
     "$PA_SRC/meson.build"
+# Patch 3: Remove 'execinfo.h' from meson's check_headers list.
+# Cross-compile quirk: meson's cc.has_header('execinfo.h') passes because
+# the HOST (Ubuntu 22.04) has /usr/include/execinfo.h.  The cross-compiler
+# then 'finds' the header via its fallback include path and defines
+# HAVE_EXECINFO_H.  But Android's bionic libc has no backtrace() /
+# backtrace_symbols() (those are glibc-only), so the source compiles but
+# fails to link / call the undeclared functions.
+# Removing 'execinfo.h' from the list means HAVE_EXECINFO_H won't be
+# defined, and pulsecore/log.c will skip the backtrace code block
+# entirely (it's wrapped in #ifdef HAVE_EXECINFO_H).
+sed -i "/^  'execinfo.h',$/d" "$PA_SRC/meson.build"
 
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
