@@ -134,6 +134,8 @@ cd "$WINE_BUILD"
     --without-coreaudio \
     --without-freetype \
     --without-fontconfig \
+    PKG_CONFIG_PATH="$WINE_OUT/lib/pkgconfig" \
+    CPPFLAGS="-I$WINE_OUT/include" \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
 # NOTE: do NOT pass --without-mingw here — Wine 9.0 REQUIRES PE
 # cross-compilation for ARM64 targets.  The error message is:
