@@ -71,8 +71,14 @@ if [[ ! -x "$WINE_NATIVE_BUILD/tools/winebuild/winebuild" ]]; then
     log "Building native Wine tools (host x86_64)..."
     mkdir -p "$WINE_NATIVE_BUILD"
     cd "$WINE_NATIVE_BUILD"
+    # Use CC=gcc explicitly — setup_toolchain.sh prepended the NDK's
+    # aarch64-linux-android26-clang to PATH, which would intercept
+    # configure's `cc` lookup and produce Android binaries (that
+    # fail to run on the Linux x86_64 container).
+    CC=gcc CXX=g++ \
     "$WINE_SRC/configure" \
         --build="x86_64-pc-linux-gnu" \
+        --host="x86_64-pc-linux-gnu" \
         --prefix="$WINE_NATIVE_BUILD/install" \
         --enable-win64 \
         --disable-win16 \
