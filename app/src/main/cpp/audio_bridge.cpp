@@ -143,25 +143,26 @@ bool start_aaudio(Session* s) {
     AAudioStreamBuilder* builder = nullptr;
     if (AAudio_createStreamBuilder(&builder) != AAUDIO_OK) return false;
 
-    builder->setFormat(AAUDIO_FORMAT_PCM_I16);
-    builder->setSampleRate(s->cfg.sample_rate);
-    builder->setChannelCount(s->cfg.channels);
-    builder->setSharingMode(AAUDIO_SHARING_MODE_EXCLUSIVE);
-    builder->setPerformanceMode(s->cfg.low_latency
+    // AAudio is a C API with opaque handles — use free-function setters.
+    AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
+    AAudioStreamBuilder_setSampleRate(builder, s->cfg.sample_rate);
+    AAudioStreamBuilder_setChannelCount(builder, s->cfg.channels);
+    AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
+    AAudioStreamBuilder_setPerformanceMode(builder, s->cfg.low_latency
         ? AAUDIO_PERFORMANCE_MODE_LOW_LATENCY
         : AAUDIO_PERFORMANCE_MODE_NONE);
-    builder->setDataCallback(aaudio_cb, s);
-    builder->setFramesPerDataCallback(s->cfg.buffer_frames / 2);
+    AAudioStreamBuilder_setDataCallback(builder, aaudio_cb, s);
+    AAudioStreamBuilder_setFramesPerDataCallback(builder, s->cfg.buffer_frames / 2);
 
     AAudioStream* stream = nullptr;
-    if (builder->openStream(&stream) != AAUDIO_OK) {
-        builder->delete();
+    if (AAudioStreamBuilder_openStream(builder, &stream) != AAUDIO_OK) {
+        AAudioStreamBuilder_delete(builder);
         LOGE("AAudio openStream failed; falling back is NOT possible at runtime");
         return false;
     }
     s->aaudio_stream = stream;
-    builder->delete();
-    if (stream->requestStart() != AAUDIO_OK) {
+    AAudioStreamBuilder_delete(builder);
+    if (AAudioStream_requestStart(stream) != AAUDIO_OK) {
         LOGE("AAudio requestStart failed");
         return false;
     }
@@ -172,8 +173,8 @@ bool start_aaudio(Session* s) {
 
 void stop_aaudio(Session* s) {
     if (!s->aaudio_stream) return;
-    s->aaudio_stream->requestStop();
-    s->aaudio_stream->close();
+    AAudioStream_requestStop(s->aaudio_stream);
+    AAudioStream_close(s->aaudio_stream);
     s->aaudio_stream = nullptr;
 }
 
@@ -192,7 +193,6 @@ bool start_opensl(Session* s) {
     (*s->opensl_engine_obj)->Realize(s->opensl_engine_obj, SL_BOOLEAN_FALSE);
     (*s->opensl_engine_obj)->GetInterface(s->opensl_engine_obj, SL_IID_ENGINE, &s->opensl_engine);
 
-    SLuint32  ids[] = {SL_ANDROID_KEY_STREAMING};
     SLboolean req[] = {SL_BOOLEAN_TRUE};
     const SLInterfaceID mix_iid = SL_IID_OUTPUTMIX;
     (*s->opensl_engine)->CreateOutputMix(s->opensl_engine, &s->opensl_mix_obj, 1, &mix_iid, req);

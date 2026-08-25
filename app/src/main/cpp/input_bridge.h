@@ -16,10 +16,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 namespace strongholddroid { namespace input {
 
 enum class EventKind : uint8_t {
@@ -65,7 +61,3 @@ void pump_into_wine() noexcept;
 void get_mouse_position(int* x_out, int* y_out) noexcept;
 
 }}  // namespace strongholddroid::input
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif

@@ -16,10 +16,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 namespace strongholddroid { namespace wine {
 
 // Global one-time initialization. Idempotent.
@@ -63,7 +59,3 @@ void force_kill(int pid) noexcept;
 const char* last_error() noexcept;
 
 }}  // namespace strongholddroid::wine
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif

@@ -23,10 +23,6 @@
 #include <stddef.h>
 #include <pthread.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 namespace strongholddroid { namespace audio {
 
 struct AudioConfig {
@@ -57,7 +53,3 @@ uint64_t current_latency_us(int session) noexcept;
 void shutdown(JNIEnv* env) noexcept;
 
 }}  // namespace strongholddroid::audio
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif
