@@ -24,26 +24,46 @@ print_banner "Setting up StrongholdDroid toolchain"
 # 1. Android NDK — pick the exact version pinned in app/build.gradle.kts
 # ----------------------------------------------------------------------------
 NDK_VERSION="${NDK_VERSION:-26.1.10909125}"
-NDK_DIR="${NDK_DIR:-$HOME/Android/Sdk/ndk/$NDK_VERSION}"
+# Prefer $ANDROID_NDK_HOME (set by Dockerfile.build and Android Studio),
+# then $NDK_DIR (explicit override), then the legacy $HOME/Android/Sdk path.
+if [[ -n "${ANDROID_NDK_HOME:-}" && -d "${ANDROID_NDK_HOME}" ]]; then
+    NDK_DIR="$ANDROID_NDK_HOME"
+    log "Using existing NDK from ANDROID_NDK_HOME: $NDK_DIR"
+else
+    NDK_DIR="${NDK_DIR:-$HOME/Android/Sdk/ndk/$NDK_VERSION}"
+fi
 
 if [[ ! -d "$NDK_DIR" ]]; then
     log "NDK $NDK_VERSION not found at $NDK_DIR — downloading..."
     mkdir -p "$(dirname "$NDK_DIR")"
-    # Avoid sdkmanager dependency — direct download from the official mirror
+    # Direct NDK download — avoids sdkmanager dependency for fresh dev boxes.
+    # NOTE: NDK package version 26.1.10909125 corresponds to release r26b.
+    # The direct download URL uses the *revision* (r26b), not the package
+    # version.  We hard-code the revision here to avoid the lookup; if you
+    # bump NDK_VERSION, also update NDK_REVISION.
+    NDK_REVISION="${NDK_REVISION:-r26b}"
     case "$(uname -s)" in
-        Linux*)  NDK_ZIP_URL="https://dl.google.com/android/repository/android-ndk-r$NDK_VERSION-linux.zip";;
-        Darwin*) NDK_ZIP_URL="https://dl.google.com/android/repository/android-ndk-r$NDK_VERSION-darwin.zip";;
+        Linux*)  NDK_ZIP_URL="https://dl.google.com/android/repository/android-ndk-${NDK_REVISION}-linux.zip";;
+        Darwin*) NDK_ZIP_URL="https://dl.google.com/android/repository/android-ndk-${NDK_REVISION}-darwin.zip";;
         *) die "Unsupported host OS: $(uname -s)";;
     esac
-    # The official download URL is more complex; fall back to sdkmanager.
     if command -v sdkmanager &> /dev/null; then
-        yes | sdkmanager --install "ndk;$NDK_VERSION" || \
-            die "Failed to install NDK via sdkmanager"
+        # Pass --sdk_root explicitly so sdkmanager doesn't second-guess.
+        yes | sdkmanager --sdk_root="${ANDROID_HOME:-$HOME/Android/Sdk}" \
+                         --install "ndk;$NDK_VERSION" \
+            || die "Failed to install NDK via sdkmanager"
+    elif command -v wget &> /dev/null; then
+        log "Falling back to direct wget (no sdkmanager)"
+        wget -q -O /tmp/ndk.zip "$NDK_ZIP_URL"
+        unzip -q /tmp/ndk.zip -d "$(dirname "$NDK_DIR")"
+        mv "$(dirname "$NDK_DIR")/android-ndk-${NDK_REVISION}" "$NDK_DIR"
+        rm /tmp/ndk.zip
     else
-        die "Either place NDK at $NDK_DIR manually or install sdkmanager"
+        die "Either place NDK at $NDK_DIR manually, install sdkmanager, or install wget"
     fi
 fi
 export ANDROID_NDK_HOME="$NDK_DIR"
+export ANDROID_NDK_ROOT="$NDK_DIR"
 log_ok "NDK: $ANDROID_NDK_HOME"
 
 # ----------------------------------------------------------------------------
