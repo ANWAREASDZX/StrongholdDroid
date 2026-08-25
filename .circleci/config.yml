@@ -86,6 +86,9 @@ jobs:
           name: Cross-compile native libraries (Wine, Box64, DXVK, gl4es, Pulse)
           # ~60 minutes cold, ~10-15 minutes warm with ccache
           command: |
+            set -x
+            echo "=== Host PWD: $PWD ==="
+            ls -la scripts/ | head -20
             mkdir -p build/ccache
             docker run --rm \
                 -v "$PWD:/work" \
@@ -93,10 +96,12 @@ jobs:
                 -e CCACHE_COMPRESS=1 \
                 -w /work \
                 strongholddroid-builder:latest \
-                bash -lc '
-                    export CCACHE_DIR=/work/build/ccache;
-                    export PATH="/usr/local/bin:$PATH";
-                    ./scripts/build_all.sh
+                bash -c '
+                    set -ex
+                    echo "=== Container CWD: $(pwd) ==="
+                    ls -la /work/scripts/ | head -20
+                    test -x /work/scripts/build_all.sh || chmod +x /work/scripts/build_all.sh
+                    /work/scripts/build_all.sh
                 '
           no_output_timeout: 75m
 
