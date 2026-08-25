@@ -57,7 +57,46 @@ apply_patches
 #   • No CUPS / SANE / libcapi20 — printing/scanning not needed
 #   • No OSMesa / Vulkan-loader (we ship our own vulkan)
 #   • Static libpulse linking
-log "Configuring Wine..."
+#
+# IMPORTANT: Wine's configure REQUIRES --with-wine-tools=DIR when
+# cross-compiling.  The "wine tools" (winebuild, wrc, wmc, widl, etc.)
+# must be BUILT NATIVELY for the build host (x86_64 Linux) and then
+# used during cross-compilation.  Without this, configure fails with:
+#   configure: error: you must use the --with-wine-tools option when
+#   cross-compiling.
+#
+# Step A: build the wine TOOLS natively for the build host.
+WINE_NATIVE_BUILD="$BUILD_DIR/wine-native-x86_64"
+if [[ ! -x "$WINE_NATIVE_BUILD/tools/winebuild/winebuild" ]]; then
+    log "Building native Wine tools (host x86_64)..."
+    mkdir -p "$WINE_NATIVE_BUILD"
+    cd "$WINE_NATIVE_BUILD"
+    "$WINE_SRC/configure" \
+        --build="x86_64-pc-linux-gnu" \
+        --prefix="$WINE_NATIVE_BUILD/install" \
+        --enable-win64 \
+        --disable-win16 \
+        --without-x \
+        --without-wayland \
+        --without-opengl \
+        --without-vulkan \
+        --without-cups \
+        --without-sane \
+        --without-capi \
+        --without-gphoto \
+        --without-usb \
+        --with-pulse \
+        --without-alsa \
+        --without-oss \
+        --without-coreaudio \
+        --without-mingw
+    # Build only the tools subdirectory — much faster than full wine.
+    make -j"$(nproc)" -C tools winebuild wrc wmc widl winegcc
+    make -C tools install
+fi
+
+# Step B: cross-configure for Android using the native tools.
+log "Configuring Wine (cross-compile for Android arm64-v8a)..."
 cd "$WINE_BUILD"
 "$WINE_SRC/configure" \
     --host="aarch64-linux-android" \
@@ -68,6 +107,7 @@ cd "$WINE_BUILD"
     --with-android \
     --with-android-ndk="$ANDROID_NDK_HOME" \
     --with-android-cpu-arch=arm64-v8a \
+    --with-wine-tools="$WINE_NATIVE_BUILD" \
     --without-x \
     --without-wayland \
     --without-opengl \
@@ -81,6 +121,7 @@ cd "$WINE_BUILD"
     --without-alsa \
     --without-oss \
     --without-coreaudio \
+    --without-mingw \
     LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
 
 log "Compiling Wine (this takes ~25 min on a 16-core box)..."
