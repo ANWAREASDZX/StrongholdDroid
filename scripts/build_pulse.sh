@@ -42,6 +42,13 @@ c = 'aarch64-linux-android26-clang'
 cpp = 'aarch64-linux-android26-clang++'
 ar = 'llvm-ar'
 strip = 'llvm-strip'
+# Use the host's pkg-config — without this, meson fails with
+# "Pkg-config for machine host machine not found" because it
+# looks for an Android-targeted pkg-config binary that doesn't
+# exist.  Host .pc files (x86_64 Linux) won't match Android
+# anyway, but meson treats each dep lookup as "not found"
+# rather than erroring out globally.
+pkgconfig = '/usr/bin/pkg-config'
 
 [host_machine]
 system = 'android'
@@ -72,13 +79,21 @@ log "Configuring PulseAudio (meson)..."
 #                                    pulseaudio v16.1 (the meson_options.txt
 #                                    has no 'nls' option).
 #
-# Patch: PulseAudio's meson.build line 377 does
+# Patch 1: PulseAudio's meson.build line 377 does
 #   libintl_dep = cc.find_library('intl')
 # unconditionally when `dgettext` isn't in libc (which is the case for
 # Android's bionic).  Patch it to `required: false` so the build doesn't
 # fail when libintl isn't available — dgettext just becomes a no-op,
 # English strings are returned as-is, which is fine for our stub lib.
+#
+# Patch 2: PulseAudio's meson.build line 605 does
+#   sndfile_dep = dependency('sndfile', version : '>= 1.0.20')
+# with required: true (default).  libsndfile isn't available for Android
+# and we don't need it (only the daemon uses it for sample format
+# handling).  Patch to required: false.
 sed -i "s|cc\.find_library('intl')|cc.find_library('intl', required: false)|g" \
+    "$PA_SRC/meson.build"
+sed -i "s|dependency('sndfile', version : '>= 1.0.20')|dependency('sndfile', version : '>= 1.0.20', required: false)|g" \
     "$PA_SRC/meson.build"
 
 meson setup "$PA_SRC" . \
