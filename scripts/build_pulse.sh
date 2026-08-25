@@ -51,6 +51,23 @@ endian = 'little'
 EOF
 
 log "Configuring PulseAudio (meson)..."
+# PulseAudio v16.1 meson_options.txt — valid options we use:
+#   -Ddaemon=false        — we don't ship a daemon, only the client lib
+#   -Ddoxygen=false       — skip docs
+#   -Dman=false           — skip man pages
+#   -Dtests=false         — skip tests
+#   -Ddatabase=simple     — in-memory database (no gdbm/tdb dependency;
+#                           the daemon is disabled so this is unused
+#                           anyway, but meson still wants the option set)
+# Removed (caused "Unknown options" error in pipeline #10):
+#   -Datomic-arm-linux-help=true   — typo; correct name is
+#                                    -Datomic-arm-linux-helpers, and
+#                                    it's only relevant for armv7 (32-bit)
+#                                    where atomic intrinsics may need
+#                                    helper functions.  arm64 has native
+#                                    atomics so this option is unused.
+#   -Dstream-restore=true          — not a real meson option; stream-restore
+#                                    is a *module name*, not a build flag.
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
     --default-library=shared \
@@ -59,9 +76,7 @@ meson setup "$PA_SRC" . \
     -Ddoxygen=false \
     -Dman=false \
     -Dtests=false \
-    -Ddatabase=gdbm \
-    -Datomic-arm-linux-help=true \
-    -Dstream-restore=true
+    -Ddatabase=simple
 
 log "Compiling PulseAudio..."
 ninja -j"$(nproc)"
