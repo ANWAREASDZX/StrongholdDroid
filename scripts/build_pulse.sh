@@ -164,6 +164,18 @@ sed -i "/cc.has_header_symbol('pthread.h', 'PTHREAD_PRIO_INHERIT')/,/^endif$/d" 
 # libpulse.so client library (used by Wine's pulseaudio driver).
 # Add subdir_done() at the top of src/utils/meson.build to skip it.
 echo 'subdir_done()' > "$PA_SRC/src/utils/meson.build"
+# Patch 7: Disable version-script linking.
+# src/pulse/meson.build applies `-Wl,-version-script=.../src/pulse/map-file`
+# to libpulse, libpulse-simple, and libpulsecommon.  The map-file lists
+# ALL exported symbols across all PulseAudio libraries — including
+# pa_glib_mainloop_* (defined in glib mainloop, which we disabled) and
+# pa_simple_* (defined in libpulse-simple).  lld (NDK's linker) is
+# strict: if a version-script symbol isn't defined in the linked
+# objects, it errors out with "version script assignment of 'PULSE_0'
+# to symbol 'X' failed: symbol not defined".
+# Set versioning_link_args to an empty list to skip the version script.
+sed -i "s|versioning_link_args = .*|versioning_link_args = []|" \
+    "$PA_SRC/src/pulse/meson.build"
 
 meson setup "$PA_SRC" . \
     --cross-file android-cross.txt \
