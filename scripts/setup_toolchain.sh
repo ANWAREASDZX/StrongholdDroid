@@ -80,11 +80,16 @@ log_ok "aarch64 clang available"
 # ----------------------------------------------------------------------------
 # 3. Meson + Ninja — Wine 8+ and gl4es prefer Meson over autoconf
 # ----------------------------------------------------------------------------
+# NOTE: PyPI's `ninja` package does NOT have a 1.12.x release — versions
+# jump from 1.11.1.4 → 1.13.0.  Pin to 1.11.1.4 (last stable on PyPI
+# matching the comment in Dockerfile.build). The Docker image already
+# ships ninja via apt's `ninja-build` package, so this branch only runs
+# on bare Ubuntu/Debian hosts that don't have ninja installed yet.
 if ! command -v meson &> /dev/null; then
     pip3 install --user meson==1.4.0
 fi
 if ! command -v ninja &> /dev/null; then
-    pip3 install --user ninja==1.12.1
+    pip3 install --user ninja==1.11.1.4
 fi
 log_ok "meson ($(meson --version)) + ninja ($(ninja --version))"
 

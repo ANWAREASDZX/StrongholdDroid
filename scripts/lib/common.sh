@@ -59,8 +59,23 @@ setup_android_env() {
     export ANDROID_NDK_HOME="$ndk"
     local bin_dir="$(ndk_toolchain_bin)"
     export PATH="$bin_dir:$PATH"
-    export CC="aarch64-linux-android26-clang"
-    export CXX="aarch64-linux-android26-clang++"
+
+    # Wrap the cross-compilers with ccache when it's available.  Wine's
+    # ./configure + make uses $CC/$CXX directly, so prefixing with ccache
+    # here gives us ~10x rebuild speed without changing the build scripts.
+    # CMake-based builds (box64, gl4es, vulkan-loader) use
+    # -DCMAKE_C_COMPILER_LAUNCHER=ccache instead — set in each *.sh.
+    local cc_wrapper=""
+    if command -v ccache &> /dev/null; then
+        cc_wrapper="ccache "
+        export CCACHE_DIR="${CCACHE_DIR:-$ROOT_DIR/build/ccache}"
+        mkdir -p "$CCACHE_DIR"
+        export CCACHE_COMPRESS="${CCACHE_COMPRESS:-1}"
+        log "  ccache: $(ccache --version | head -1) | dir=$CCACHE_DIR"
+    fi
+
+    export CC="${cc_wrapper}aarch64-linux-android26-clang"
+    export CXX="${cc_wrapper}aarch64-linux-android26-clang++"
     export AR="llvm-ar"
     export RANLIB="llvm-ranlib"
     export STRIP="llvm-strip"

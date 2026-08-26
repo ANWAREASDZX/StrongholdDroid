@@ -20,7 +20,7 @@ print_banner "Building Box64 for Android arm64-v8a"
 
 setup_android_env
 
-BOX64_VERSION="${BOX64_VERSION:-v0.3.36}"
+BOX64_VERSION="${BOX64_VERSION:-v0.4.4}"
 BOX64_SRC="$BUILD_DIR/box64-$BOX64_VERSION"
 BOX64_BUILD="$BUILD_DIR/box64-android-arm64"
 
@@ -36,6 +36,8 @@ cd "$BOX64_BUILD"
 log "Configuring Box64..."
 cmake "$BOX64_SRC" \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DANDROID_ABI="arm64-v8a" \
     -DANDROID_PLATFORM="android-26" \
     -DCMAKE_BUILD_TYPE=Release \

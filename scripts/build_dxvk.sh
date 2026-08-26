@@ -70,10 +70,14 @@ done
 # This way DXVK's PE binaries can be MinGW-compiled without depending
 # on Android's libvulkan directly.
 
+# NOTE: The actual tag on KhronosGroup/Vulkan-Loader is `vulkan-sdk-1.3.283.0`
+# (with the `vulkan-sdk-` prefix and `.0` patch suffix). The older
+# `sdk-1.3.283` tag pattern was retired after sdk-1.3.261.x — using it
+# fails with "Remote branch sdk-1.3.283 not found in upstream origin".
 VULKAN_LOADER_SRC="$BUILD_DIR/vulkan-loader-android"
 if [[ ! -d "$VULKAN_LOADER_SRC/.git" ]]; then
-    log "Cloning Vulkan-Loader shim..."
-    git clone --depth 1 --branch sdk-1.3.283 \
+    log "Cloning Vulkan-Loader shim (tag vulkan-sdk-1.3.283.0)..."
+    git clone --depth 1 --branch vulkan-sdk-1.3.283.0 \
         https://github.com/KhronosGroup/Vulkan-Loader.git "$VULKAN_LOADER_SRC"
 fi
 
@@ -83,6 +87,8 @@ cd "$VULKAN_LOADER_BUILD"
 
 cmake "$VULKAN_LOADER_SRC" \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DANDROID_ABI="arm64-v8a" \
     -DANDROID_PLATFORM="android-26" \
     -DCMAKE_BUILD_TYPE=Release \

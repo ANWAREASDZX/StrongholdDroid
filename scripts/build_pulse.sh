@@ -275,4 +275,39 @@ Cflags: -I\${includedir}
 EOF
 
 log_ok "PulseAudio stub built (with headers, symlinks, + .pc)"
+
+# ---- Convenience symlinks at $PREBUILT_DIR/arm64-v8a/ (PARENT of lib/) -----
+# Downstream consumers (build_apk.sh EXPECTED_LIBS, .circleci/config.yml
+# `test -f`, CMakeLists.txt IMPORTED_LOCATION) all expect libpulse.so at
+# the TOP-LEVEL prebuilt dir (arm64-v8a/libpulse.so), NOT under
+# arm64-v8a/lib/. Without these symlinks the APK build's sanity-check
+# fails with "Missing prebuilt: libpulse.so" even though meson install
+# succeeded.  Wine's configure still sees the real files under lib/
+# via PKG_CONFIG_PATH/PULSE_LIBS=-L$WINE_OUT/lib.
+PULSE_PARENT_DIR="$PREBUILT_DIR/arm64-v8a"
+log "Installing convenience symlinks at $PULSE_PARENT_DIR/ ..."
+for f in libpulse.so.0 libpulse.so libpulse-simple.so.0 libpulse-simple.so; do
+    src_path="$PULSE_LIB_DIR/$f"
+    dst_path="$PULSE_PARENT_DIR/$f"
+    if [[ -e "$src_path" || -L "$src_path" ]] && [[ ! -e "$dst_path" ]]; then
+        ln -sf "lib/$f" "$dst_path"
+        log "  linked: $dst_path → lib/$f"
+    fi
+done
+# libpulsecommon-*.so has a version-suffixed name that varies; glob it.
+for f in "$PULSE_LIB_DIR"/libpulsecommon-*.so; do
+    [[ -e "$f" || -L "$f" ]] || continue
+    base="$(basename "$f")"
+    if [[ ! -e "$PULSE_PARENT_DIR/$base" ]]; then
+        ln -sf "lib/$base" "$PULSE_PARENT_DIR/$base"
+        log "  linked: $PULSE_PARENT_DIR/$base → lib/$base"
+    fi
+done
+# Sanity-check: the convenience symlink at parent dir resolves.
+if [[ -L "$PULSE_PARENT_DIR/libpulse.so" && -f "$PULSE_PARENT_DIR/libpulse.so" ]]; then
+    log_ok "libpulse.so reachable at $PULSE_PARENT_DIR/libpulse.so"
+else
+    warn "libpulse.so symlink not resolvable at parent — downstream APK build may fail"
+fi
+
 print_banner "PulseAudio build complete ✓"

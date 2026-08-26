@@ -10,7 +10,10 @@
 
 cmake_minimum_required(VERSION 3.22.1)
 
-project(strongholddroid LANGUAGES C CXX)
+# Version MUST match app/build.gradle.kts `versionName` (minus "-debug" suffix).
+# Without an explicit VERSION, `PROJECT_VERSION` stays empty and the
+# `-DSTRONGHOLDDROID_VERSION=...` compile definition compiles to an empty string.
+project(strongholddroid VERSION 0.1.0 LANGUAGES C CXX)
 
 # ---- Build configuration -----------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
@@ -91,9 +94,13 @@ add_library(wine SHARED IMPORTED)
 set_target_properties(wine PROPERTIES IMPORTED_LOCATION
     ${PREBUILT_ABI_DIR}/libwine.so)
 
-add_library(wine_server SHARED IMPORTED)
-set_target_properties(wine_server PROPERTIES IMPORTED_LOCATION
-    ${PREBUILT_ABI_DIR}/libwine_server.so)
+# NOTE: wineserver is an ELF executable launched at runtime via fork/exec
+# (see wine_bridge.cpp's launch_game). It is NOT a shared library — there
+# is no libwine_server.so to link against. The previous IMPORTED target
+# pointing at a non-existent libwine_server.so file is removed; if a
+# future build variant needs to dlopen() wineserver as a .so, add an
+# install_lib step in build_wine.sh that produces libwine_server.so and
+# re-enable the IMPORTED target here.
 
 add_library(pulse SHARED IMPORTED)
 set_target_properties(pulse PROPERTIES IMPORTED_LOCATION

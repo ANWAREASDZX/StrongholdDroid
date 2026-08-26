@@ -42,27 +42,56 @@ WRAPPER
 fi
 
 # ---- Build ----------------------------------------------------------------
+# AGP 8.5.2 with `splits.abi.isUniversalApk = true` produces BOTH a
+# universal APK and per-ABI APKs. The exact filename depends on:
+#   - signing config (signed vs unsigned → different suffix)
+#   - AGP version (universal suffix conventions changed in 8.x)
+# Try a list of candidate names instead of hard-coding one — first match wins.
 cd "$ROOT_DIR"
 case "$VARIANT" in
     debug)
         ./gradlew :app:assembleDebug --no-daemon --console=plain
-        APK_OUT="app/build/outputs/apk/debug/app-debug.apk"
+        APK_CANDIDATES=(
+            "app/build/outputs/apk/debug/app-debug.apk"
+            "app/build/outputs/apk/debug/app-universal-debug.apk"
+            "app/build/outputs/apk/debug/app-arm64-v8a-debug.apk"
+        )
         ;;
     release)
+        # signingConfig is always applied (build.gradle.kts L83). With
+        # signing env vars set, output is `app-release.apk` (signed).
+        # Without signing, AGP keeps the `app-release-unsigned.apk` name.
         ./gradlew :app:assembleRelease --no-daemon --console=plain
-        APK_OUT="app/build/outputs/apk/release/app-release-unsigned.apk"
+        APK_CANDIDATES=(
+            "app/build/outputs/apk/release/app-release.apk"
+            "app/build/outputs/apk/release/app-release-unsigned.apk"
+            "app/build/outputs/apk/release/app-universal-release.apk"
+            "app/build/outputs/apk/release/app-universal-release-unsigned.apk"
+            "app/build/outputs/apk/release/app-arm64-v8a-release.apk"
+        )
         ;;
     ci)
         ./gradlew :app:assembleCi --no-daemon --console=plain \
             --no-build-cache --no-configuration-cache
-        APK_OUT="app/build/outputs/apk/ci/app-ci.apk"
+        APK_CANDIDATES=(
+            "app/build/outputs/apk/ci/app-ci.apk"
+            "app/build/outputs/apk/ci/app-universal-ci.apk"
+            "app/build/outputs/apk/ci/app-arm64-v8a-ci.apk"
+        )
         ;;
     *)
         die "Unknown variant: $VARIANT (use debug|release|ci)"
         ;;
 esac
 
-[[ -f "$APK_OUT" ]] || die "APK not produced at $APK_OUT"
+APK_OUT=""
+for c in "${APK_CANDIDATES[@]}"; do
+    if [[ -f "$c" ]]; then
+        APK_OUT="$c"
+        break
+    fi
+done
+[[ -n "$APK_OUT" ]] || die "APK not produced (tried: ${APK_CANDIDATES[*]})"
 
 APK_SIZE=$(du -h "$APK_OUT" | cut -f1)
 log_ok "Built: $APK_OUT ($APK_SIZE)"

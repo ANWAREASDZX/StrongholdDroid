@@ -20,7 +20,7 @@ print_banner "Building gl4es for Android arm64-v8a"
 
 setup_android_env
 
-GL4ES_VERSION="${GL4ES_VERSION:-v1.2.3}"
+GL4ES_VERSION="${GL4ES_VERSION:-v1.1.6}"
 GL4ES_SRC="$BUILD_DIR/gl4es-$GL4ES_VERSION"
 GL4ES_BUILD="$BUILD_DIR/gl4es-android-arm64"
 
@@ -36,6 +36,8 @@ cd "$GL4ES_BUILD"
 log "Configuring gl4es..."
 cmake "$GL4ES_SRC" \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DANDROID_ABI="arm64-v8a" \
     -DANDROID_PLATFORM="android-26" \
     -DCMAKE_BUILD_TYPE=Release \

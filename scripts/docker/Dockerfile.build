@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv \
         mingw-w64 mingw-w64-tools \
         cmake ninja-build pkg-config patchelf \
+        ccache \
         libfreetype6-dev libfreetype-dev \
         libx11-dev libxext-dev libxcomposite-dev libxrandr-dev \
         libxrender-dev libxcursor-dev libxinerama-dev libxi-dev \
@@ -42,6 +43,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         locales \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
+
+# Pre-configure ccache defaults (used when CircleCI passes CCACHE_DIR via -e).
+# max_size = 2 GiB keeps the ccache well under CircleCI's 14 GiB cache limit
+# even with both arm64 + x86_64 object files cached.  Compression is on by
+# default in ccache 4.x — no need to set CCACHE_COMPRESS here.
+RUN ccache --set-config=max_size=2G \
+ && ccache --set-config=compiler_check=content \
+ && ccache --set-config=hash_dir=false
 
 ENV PATH="${PATH}:/usr/lib/jvm/java-17-openjdk-amd64/bin:/root/.local/bin:/opt/android-sdk/cmdline-tools/latest/bin"
 
@@ -73,6 +82,19 @@ RUN python3 -m pip install --upgrade pip==24.3.1 \
     && pip3 install \
         meson==1.4.0 \
         cmake==3.30.3
+
+# ---- 3b. Gradle 8.7 (system-wide) -----------------------------------------
+# The repo's gradlew stub falls back to `gradle` on PATH when the
+# gradle-wrapper.jar is missing (which it is in this repo — only the
+# .properties file is committed). Installing Gradle in the image means
+# `./gradlew :app:assembleDebug` works without any manual bootstrap.
+# Matches the version pinned in gradle/wrapper/gradle-wrapper.properties.
+ENV GRADLE_VERSION=8.7
+RUN wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip \
+ && unzip -q /tmp/gradle.zip -d /opt \
+ && ln -sf "/opt/gradle-${GRADLE_VERSION}/bin/gradle" /usr/local/bin/gradle \
+ && rm /tmp/gradle.zip \
+ && gradle --version | head -3
 
 # ---- 4. Project working dir -----------------------------------------------
 WORKDIR /work
