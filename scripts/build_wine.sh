@@ -110,18 +110,17 @@ fi
 log "Configuring Wine (cross-compile for Android arm64-v8a)..."
 cd "$WINE_BUILD"
 
-# Create a `dlltool` symlink in a PATH dir that points to the NDK's
-# llvm-dlltool.  Wine's winebuild tool searches PATH for `dlltool`
-# (or `${target}-dlltool`) — it doesn't respect the DLLTOOL env var
-# at runtime.  Creating a symlink is the cleanest workaround.
-NDK_BIN="$(dirname "$(command -v aarch64-linux-android26-clang)")"
-DLLTOOL_LINK_DIR="/usr/local/bin"
+# Create a `dlltool` symlink in a PATH dir that points to either:
+# - the NDK's llvm-dlltool (if shipped by NDK r26)
+# - or the system's llvm-dlltool (installed via apt's `llvm` package)
+# Wine's winebuild tool searches PATH for `dlltool` (or `${target}-dlltool`)
+# — it doesn't respect the DLLTOOL env var at runtime.
 if ! command -v dlltool &> /dev/null; then
-    if [[ -x "$NDK_BIN/llvm-dlltool" ]]; then
-        ln -sf "$NDK_BIN/llvm-dlltool" "$DLLTOOL_LINK_DIR/dlltool"
-        log "  symlinked dlltool → $NDK_BIN/llvm-dlltool"
+    if command -v llvm-dlltool &> /dev/null; then
+        ln -sf "$(command -v llvm-dlltool)" /usr/local/bin/dlltool
+        log "  symlinked dlltool → $(command -v llvm-dlltool)"
     else
-        die "llvm-dlltool not found in NDK bin at $NDK_BIN"
+        die "neither dlltool nor llvm-dlltool found in PATH. Install the 'llvm' apt package."
     fi
 fi
 
