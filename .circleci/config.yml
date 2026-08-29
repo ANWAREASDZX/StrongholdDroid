@@ -185,6 +185,10 @@ jobs:
             tar --exclude='.git' --exclude='build/ccache' --exclude='app/build' -cf - . \
               | docker cp - apk-builder:/work/
             docker start -a apk-builder
+            # docker cp does NOT create the destination directory —
+            # mkdir -p first or the copy fails with
+            # "invalid output path: directory ... does not exist".
+            mkdir -p app/build/outputs/apk app/src/main/assets
             docker cp apk-builder:/work/app/build/outputs/apk/. ./app/build/outputs/apk/
             # assets/prebuilt.zip is produced inside the container by
             # build_apk.sh — copy it back so it shows up in the artifacts.
@@ -218,6 +222,8 @@ jobs:
               | docker cp - apk-release:/work/
             docker cp /tmp/keystore.jks apk-release:/tmp/keystore.jks
             docker start -a apk-release
+            # mkdir -p: docker cp needs the destination to exist (see above).
+            mkdir -p app/build/outputs/apk
             docker cp apk-release:/work/app/build/outputs/apk/. ./app/build/outputs/apk/
             docker rm apk-release
           no_output_timeout: 30m
