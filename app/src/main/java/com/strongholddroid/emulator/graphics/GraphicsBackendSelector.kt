@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.strongholddroid.emulator.emulator.EmulatorConfig
+import com.strongholddroid.emulator.emulator.GraphicsBackend
 import com.strongholddroid.emulator.profiles.GameProfile
 import com.strongholddroid.emulator.profiles.StrongholdCrusaderProfile
 
@@ -34,7 +35,7 @@ object GraphicsBackendSelector {
 
     private const val TAG = "GfxSelector"
 
-    fun select(ctx: Context, profile: GameProfile): EmulatorConfig.GraphicsBackend {
+    fun select(ctx: Context, profile: GameProfile): GraphicsBackend {
         val deviceClass = DeviceClassifier.classify(ctx)
         val isVulkanReady = VulkanDetector.isUsable(ctx)
 
@@ -44,36 +45,36 @@ object GraphicsBackendSelector {
         val (primary, fallback, dynRes) = when (profile.slug) {
             StrongholdCrusaderProfile.SLUG_V11 -> when {
                 deviceClass == DeviceClass.HIGH_END && isVulkanReady ->
-                    Triple(EmulatorConfig.GraphicsBackend.Backend.WINED3D_ZINK,
-                           EmulatorConfig.GraphicsBackend.Backend.WINED3D_GL4ES,
-                           EmulatorConfig.GraphicsBackend.DynamicResolution.FOR_SDM855)
+                    Triple(GraphicsBackend.Backend.WINED3D_ZINK,
+                           GraphicsBackend.Backend.WINED3D_GL4ES,
+                           GraphicsBackend.DynamicResolution.FOR_SDM855)
                 else ->
-                    Triple(EmulatorConfig.GraphicsBackend.Backend.WINED3D_GL4ES,
+                    Triple(GraphicsBackend.Backend.WINED3D_GL4ES,
                            null,
-                           EmulatorConfig.GraphicsBackend.DynamicResolution.FOR_SDM665)
+                           GraphicsBackend.DynamicResolution.FOR_SDM665)
             }
             StrongholdCrusaderProfile.SLUG_HD,
             StrongholdCrusaderProfile.SLUG_EXTREME -> when {
                 isVulkanReady && deviceClass != DeviceClass.LOW_END ->
-                    Triple(EmulatorConfig.GraphicsBackend.Backend.DXVK_VULKAN,
-                           EmulatorConfig.GraphicsBackend.Backend.WINED3D_GL4ES,
+                    Triple(GraphicsBackend.Backend.DXVK_VULKAN,
+                           GraphicsBackend.Backend.WINED3D_GL4ES,
                            if (deviceClass == DeviceClass.HIGH_END)
-                               EmulatorConfig.GraphicsBackend.DynamicResolution.FOR_SDM855
+                               GraphicsBackend.DynamicResolution.FOR_SDM855
                            else
-                               EmulatorConfig.GraphicsBackend.DynamicResolution.FOR_SDM665)
+                               GraphicsBackend.DynamicResolution.FOR_SDM665)
                 else ->
-                    Triple(EmulatorConfig.GraphicsBackend.Backend.WINED3D_GL4ES,
+                    Triple(GraphicsBackend.Backend.WINED3D_GL4ES,
                            null,
-                           EmulatorConfig.GraphicsBackend.DynamicResolution.FOR_SDM665)
+                           GraphicsBackend.DynamicResolution.FOR_SDM665)
             }
-            else -> Triple(EmulatorConfig.GraphicsBackend.Backend.WINED3D_GL4ES, null,
-                EmulatorConfig.GraphicsBackend.DynamicResolution.FOR_SDM665)
+            else -> Triple(GraphicsBackend.Backend.WINED3D_GL4ES, null,
+                GraphicsBackend.DynamicResolution.FOR_SDM665)
         }
 
         // Save the decision so EmulatorConfig can re-hydrate on relaunch
         BackendPrefs.write(ctx, profile.slug, primary.name, fallback?.name)
 
-        return EmulatorConfig.GraphicsBackend(
+        return GraphicsBackend(
             primary = primary,
             fallback = fallback,
             dynamicResolution = dynRes,

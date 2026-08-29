@@ -2,6 +2,7 @@ package com.strongholddroid.emulator.emulator
 
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
+import kotlinx.serialization.Serializable
 
 /**
  * StrongholdDroid emulator configuration.
@@ -13,18 +14,23 @@ import kotlinx.parcelize.Parcelize
  * when the user fiddles with settings mid-session.
  */
 @Parcelize
+@Serializable
 data class EmulatorConfig(
     /** Absolute path to a Wine prefix directory, e.g. .../prefixes/sc-hd */
     val winePrefix: String,
 
-    /** Absolute path to the wine64 binary inside the app's private files dir */
+    /** Absolute path to the wine loader binary inside the app's private files dir */
     val wineBinary: String,
 
     /** Windows path of the game's main executable (e.g. C:\\Stronghold HD\\Stronghold_Crusader.exe) */
     val gameExec: String,
 
-    /** Wine architecture — win64 with WoW64 thunking on Wine 8+. */
-    val wineArch: String = "win64",
+    /**
+     * WINEARCH for the prefix. Stronghold Crusader is a 32-bit x86 game —
+     * with the "Arm64 Wine WOW64" runtime (aarch64 wine + box64 wow64 cpu
+     * dll) 32-bit executables run in a win32 prefix through WoW64.
+     */
+    val wineArch: String = "win32",
 
     /** Enable Wine's esync (eventfd-based sync). Requires RLIMIT_NOFILE bump. */
     val esync: Boolean = true,
@@ -57,6 +63,7 @@ data class EmulatorConfig(
 
 /** Selects how DX7 → modern API translation happens. */
 @Parcelize
+@Serializable
 data class GraphicsBackend(
     val primary: Backend,
     val fallback: Backend?,
@@ -88,6 +95,7 @@ data class GraphicsBackend(
     }
 
     @Parcelize
+    @Serializable
     data class DynamicResolution(
         val enabled: Boolean,
         val targetFps: Int,            // e.g. 30 for medium-end devices
@@ -105,6 +113,7 @@ data class GraphicsBackend(
 
 /** Flags passed to box64's `BOX64_DYNAREC_*` env vars. */
 @Parcelize
+@Serializable
 data class Box64DynarecFlags(
     val strongArm: Boolean = true,        // BOX64_DYNAREC_STRONGARM=1
     val bigBlock: Int = 0,                // 0=off, 1=conservative, 2=aggressive

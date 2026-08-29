@@ -173,7 +173,7 @@ class GestureHandler(
     private fun enterTwoFingerDown(e: MotionEvent) {
         state = GestureState.TWO_FINGER_DOWN
         stateStartMs = SystemClock.uptimeMillis()
-        val (p1, p2) = twoFingerPoints() ?: return reset()
+        val (p1, p2) = twoFingerPoints() ?: run { reset(); return }
         initialPinchDist = distance(p1, p2)
         initialPinchAngle = angleOf(p1, p2)
         initialTwoFingerCentroid = centroid(p1, p2)

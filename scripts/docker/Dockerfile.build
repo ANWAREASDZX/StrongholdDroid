@@ -27,11 +27,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         bison flex \
-        git wget curl unzip \
+        git wget curl unzip xz-utils zip \
         python3 python3-pip python3-venv \
         mingw-w64 mingw-w64-tools \
         cmake ninja-build pkg-config patchelf \
         ccache \
+        glslang-tools \
         libfreetype6-dev libfreetype-dev \
         libx11-dev libxext-dev libxcomposite-dev libxrandr-dev \
         libxrender-dev libxcursor-dev libxinerama-dev libxi-dev \
@@ -43,6 +44,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         locales \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
+
+# ---- 1b. llvm-mingw (PE cross-compilers) -----------------------------------
+# Wine's PE builtin DLLs (aarch64 + i386 WoW64) and box64's wow64 cpu dll
+# are compiled with aarch64-w64-mingw32-clang / i686-w64-mingw32-clang.
+# Ubuntu 22.04's mingw-w64 only ships x86_64/i686 GCC (no aarch64), so we
+# install llvm-mingw at /opt/llvm-mingw.  scripts/lib/common.sh adds its
+# bin/ dir to PATH (LLVM_MINGW_BIN / /opt/llvm-mingw/bin detection).
+ENV LLVM_MINGW_VERSION=20240619
+RUN wget -q "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-20.04-x86_64.tar.xz" -O /tmp/llvm-mingw.tar.xz \
+    && tar -xJf /tmp/llvm-mingw.tar.xz -C /opt \
+    && mv "/opt/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-20.04-x86_64" /opt/llvm-mingw \
+    && rm /tmp/llvm-mingw.tar.xz \
+    && /opt/llvm-mingw/bin/aarch64-w64-mingw32-clang --version | head -1
 
 # Pre-configure ccache defaults (used when CircleCI passes CCACHE_DIR via -e).
 # max_size = 2 GiB keeps the ccache well under CircleCI's 14 GiB cache limit

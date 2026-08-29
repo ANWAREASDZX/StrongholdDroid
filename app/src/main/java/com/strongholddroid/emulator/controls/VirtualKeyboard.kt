@@ -44,7 +44,7 @@ class VirtualKeyboard(private val ctx: Context) {
             "QWERTYUIOP".toList(),
             "ASDFGHJKL".toList(),
             "ZXCVBNM".toList(),
-            listOf("␣", "⏎", "⌫")
+            listOf('␣', '⏎', '⌫')
         )
         for (row in rows) {
             val rowLayout = LinearLayout(ctx).apply {

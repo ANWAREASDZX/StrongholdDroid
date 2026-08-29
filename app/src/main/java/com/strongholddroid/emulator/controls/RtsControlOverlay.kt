@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import com.strongholddroid.emulator.R
 import com.strongholddroid.emulator.input.InputBridge
 import com.strongholddroid.emulator.input.VkTranslator
+import kotlin.math.abs
 
 /**
  * The full RTS control overlay — owns a [VirtualMouse], a [GestureHandler],

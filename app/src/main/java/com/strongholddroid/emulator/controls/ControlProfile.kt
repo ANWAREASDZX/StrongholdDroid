@@ -46,8 +46,9 @@ data class ControlProfile(
     val gamepadBindings: GamepadBindings = GamepadBindings.DEFAULT,
 ) : Parcelable {
 
-    /** Discrete gestures that the [GestureHandler] can recognize. */
-    @Parcelize
+    /** Discrete gestures that the [GestureHandler] can recognize.
+     *  (Enums are java.io.Serializable — parcelize handles them without
+     *  @Parcelize, which is invalid on enum classes.) */
     @Serializable
     enum class RtsGesture {
         PINCH,                // two fingers moving towards/away
@@ -62,7 +63,6 @@ data class ControlProfile(
         NONE,                 // disable this gesture entirely
     }
 
-    @Parcelize
     @Serializable
     enum class KeyboardLayout { QWERTY, AZERTY, QWERTZ, GAMEPAD_ONLY }
 
@@ -88,14 +88,13 @@ data class ControlProfile(
         val start:      GamepadAction = GamepadAction.VK_PAUSE,
         val leftStickClick:  GamepadAction = GamepadAction.VK_KEY_F1,
         val rightStickClick: GamepadAction = GamepadAction.VK_KEY_F2,
-    ) {
+    ) : Parcelable {
         companion object {
             val DEFAULT = GamepadBindings()
         }
     }
 
     /** What a single gamepad control is mapped to. */
-    @Parcelize
     @Serializable
     sealed class GamepadAction : Parcelable {
         @Parcelize data object NONE : GamepadAction()
@@ -108,22 +107,25 @@ data class ControlProfile(
         @Parcelize data object MOUSE_WHEEL_DOWN : GamepadAction()
         @Parcelize data class VK_KEY(val vk: Int) : GamepadAction()
 
-        // Common shortcuts — avoid allocating the data class per profile.
-        val VK_KEY_W = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_W)
-        val VK_KEY_A = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_A)
-        val VK_KEY_S = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_S)
-        val VK_KEY_D = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_D)
-        val VK_KEY_B = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_B)
-        val VK_KEY_H = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_H)
-        val VK_KEY_Q = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_Q)
-        val VK_KEY_E = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_E)
-        val VK_KEY_1 = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_1)
-        val VK_KEY_2 = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_2)
-        val VK_KEY_SPACE = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.SPACE)
-        val VK_ESCAPE    = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.ESCAPE)
-        val VK_PAUSE     = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_P)
-        val VK_KEY_F1    = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.F1)
-        val VK_KEY_F2    = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.F2)
+        companion object {
+            // Common shortcuts — shared instances so profiles don't each
+            // allocate their own VK_KEY data class.
+            val VK_KEY_W = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_W)
+            val VK_KEY_A = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_A)
+            val VK_KEY_S = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_S)
+            val VK_KEY_D = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_D)
+            val VK_KEY_B = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_B)
+            val VK_KEY_H = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_H)
+            val VK_KEY_Q = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_Q)
+            val VK_KEY_E = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_E)
+            val VK_KEY_1 = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_1)
+            val VK_KEY_2 = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_2)
+            val VK_KEY_SPACE = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.SPACE)
+            val VK_ESCAPE    = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.ESCAPE)
+            val VK_PAUSE     = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.KEY_P)
+            val VK_KEY_F1    = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.F1)
+            val VK_KEY_F2    = VK_KEY(com.strongholddroid.emulator.input.VkTranslator.Vk.F2)
+        }
     }
 }
 

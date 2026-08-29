@@ -10,7 +10,7 @@ import java.io.File
  * that Wine+box64 expect:
  *
  *   <filesDir>/
- *     usr/                 ← wine64 + wineserver + libwine
+ *     usr/                 ← wine + wineserver + builtin DLLs
  *     box64/               ← box64rc + box64 shared cache
  *     prefixes/<slug>/     ← WINEPREFIX per game profile
  *     dxvk/<slug>/          ← DXVK native DLLs
@@ -30,21 +30,21 @@ class ContainerManager(private val ctx: Context) {
 
     fun filesRoot(): File = ctx.filesDir
 
-    fun wineBinary(): File = File(ctx.filesDir, "usr/bin/wine64")
+    fun wineBinary(): File = File(ctx.filesDir, "usr/bin/wine")
     fun wineServer(): File = File(ctx.filesDir, "usr/bin/wineserver")
-    fun box64Binary(): File = File(ctx.filesDir, "usr/bin/box64")
+    fun wow64CpuDll(): File = File(ctx.filesDir, "wow64/wowbox64.dll")
 
     fun verifyRuntime(): List<VerifyIssue> {
         val issues = mutableListOf<VerifyIssue>()
-        if (!wineBinary().exists())  issues += VerifyIssue.MissingBinary("wine64")
+        if (!wineBinary().exists())  issues += VerifyIssue.MissingBinary("wine")
         if (!wineServer().exists())  issues += VerifyIssue.MissingBinary("wineserver")
-        // box64 is optional on x86_64 emulators
+        // The box64 WoW64 cpu dll is required for 32-bit x86 games on arm64
         if (android.os.Build.SUPPORTED_ABIS.any { it.startsWith("arm64") }
-            && !box64Binary().exists())
-            issues += VerifyIssue.MissingBinary("box64")
-        // Check libwine.so presence
-        val libwine = File(ctx.filesDir, "usr/lib/libwine.so")
-        if (!libwine.exists()) issues += VerifyIssue.MissingBinary("libwine.so")
+            && !wow64CpuDll().exists())
+            issues += VerifyIssue.MissingBinary("wowbox64.dll")
+        // Check the runtime libpulse stub (wine's winepulse.drv links it)
+        val libpulse = File(ctx.filesDir, "usr/lib/libpulse.so.0")
+        if (!libpulse.exists()) issues += VerifyIssue.MissingBinary("libpulse.so.0")
         return issues
     }
 

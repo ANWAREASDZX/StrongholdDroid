@@ -76,7 +76,7 @@ object EmulatorCore {
                 val backend = GraphicsBackendSelector.select(ctx, profile)
                 val cfg = EmulatorConfig(
                     winePrefix        = EnvironmentBuilder.winePrefixFor(profile),
-                    wineBinary        = File(ctx.filesDir, "usr/bin/wine64").absolutePath,
+                    wineBinary        = File(ctx.filesDir, "usr/bin/wine").absolutePath,
                     gameExec          = profile.gameExecutable,
                     audioPipePath     = File(ctx.cacheDir, "pulse-audio.fifo").absolutePath,
                     graphicsBackend   = backend,
@@ -86,6 +86,8 @@ object EmulatorCore {
                 currentConfig = cfg
 
                 // 2. Build environment
+                //    (first call also extracts assets/prebuilt.zip → filesDir)
+                EnvironmentBuilder.ensureFirstRunExtraction(ctx)
                 EnvironmentBuilder.ensureWinePrefix(ctx, profile, cfg)
                 EnvironmentBuilder.ensureBox64Environment(ctx, cfg)
                 EnvironmentBuilder.ensureDXVKDlls(ctx, profile, cfg)
@@ -107,11 +109,11 @@ object EmulatorCore {
                     perf.start()
                     val pumpIntervalNs = 1_000_000_000L / 240  // 240 Hz cap
                     var lastPump = 0L
-                    while (stopRequested.not() && exitDeferred.isCompleted.not()) {
+                    while (!stopRequested.get() && !exitDeferred.isCompleted) {
                         val now = System.nanoTime()
                         if (now - lastPump >= pumpIntervalNs) {
                             InputBridge.pumpIntoWine()
-                            perf.tick()
+                            perf.onFrame(System.nanoTime())
                             lastPump = now
                         } else {
                             // Spin-yield so we hit exactly 240 Hz without busy-looping

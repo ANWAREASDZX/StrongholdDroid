@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.strongholddroid.emulator.R
 import com.strongholddroid.emulator.profiles.GameProfileManager
+import com.strongholddroid.emulator.profiles.GameProfileManagerHolder
 import com.strongholddroid.emulator.profiles.StrongholdCrusaderProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +41,7 @@ class EmulatorService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    private val _state = MutableStateFlow(State.IDLE)
+    private val _state = MutableStateFlow<State>(State.IDLE)
     val state: StateFlow<State> = _state.asStateFlow()
 
     override fun onCreate() {
@@ -72,7 +73,7 @@ class EmulatorService : Service() {
     private suspend fun launchGame(profileSlug: String, saveSlot: Int) {
         runCatching {
             _state.value = State.LAUNCHING
-            val profile = GameProfileManager.get(this).bySlug(profileSlug)
+            val profile = GameProfileManagerHolder.get(this).bySlug(profileSlug)
                 ?: error("Game profile '$profileSlug' not found")
             val config  = EmulatorCore.launch(profile, saveSlot)
             _state.value = State.RUNNING(config.gameProfileSlug)

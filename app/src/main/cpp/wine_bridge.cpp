@@ -1,14 +1,19 @@
-// wine_bridge.cpp — StrongholdDroid Wine/Box64 process supervisor (impl).
+// wine_bridge.cpp — StrongholdDroid Wine process supervisor (impl).
 //
 // This file implements everything declared in wine_bridge.h. It uses a
 // minimal subset of POSIX (fork, execvp, pipe, dup2, setsid) so that the
 // logic is identical on real Android devices and on the build-time
-// x86_64 emulator (where box64 is not used and wine64 runs natively).
+// x86_64 emulator.
 //
-// The actual `wine64` binary is shipped inside the APK under
-//   /data/data/<pkg>/files/usr/bin/wine64
-// and on ARM64 devices is launched *indirectly* via the `box64` launcher
-// that the prebuilt libbox64.so exposes as `box64_run_wine()`.
+// Architecture ("Arm64 Wine WOW64"):
+//   • The wine loader binary ships inside the APK runtime asset
+//     (assets/prebuilt.zip → extracted to filesDir/usr/bin/wine) and is
+//     an ARM64 ELF that runs NATIVELY — no instruction translation for
+//     wine itself.
+//   • The game's 32-bit x86 code is executed INSIDE the wine process by
+//     box64's WoW64 cpu dll (wowbox64.dll, staged as xtajit.dll in the
+//     WINEPREFIX by EnvironmentBuilder).  There is no separate box64
+//     process and no box64 library to link against.
 
 #include "wine_bridge.h"
 
@@ -21,7 +26,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/prctl.h>
-#include <spawn.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -30,10 +34,6 @@
 #include <cstdlib>
 #include <cerrno>
 #include <atomic>
-
-// From prebuilt/libbox64.so — arm64-only symbol, weak so x86_64 still links.
-__attribute__((weak)) int box64_run_wine(int argc, const char* const* argv,
-                                          const char* const* envp);
 
 #define LOG_TAG "strongholddroid-wine"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -233,28 +233,18 @@ int launch_game(const LaunchOptions* opts) noexcept {
         std::vector<const char*> env_argv;
         build_env_vector(opts, env_storage, env_argv);
 
-        // argv:  wine_bin_path wine_arch game_exec
+        // argv:  wine_bin_path game_exec  (wine's CLI takes no arch
+        // argument — WINEARCH comes in via the env vector, and the wow64
+        // loader auto-detects 32-bit executables).
         std::vector<const char*> argv;
         argv.push_back(opts->wine_bin_path);
-        argv.push_back(opts->wine_arch);
         argv.push_back(opts->game_exec);
         argv.push_back(nullptr);
 
-        // On arm64, route through box64 if available.
-        if (box64_run_wine) {
-            LOGI("wine_bridge: launching via box64_run_wine (arm64)");
-            int rc = box64_run_wine(
-                static_cast<int>(argv.size()) - 1,
-                argv.data(),
-                env_argv.data());
-            _exit(rc < 0 ? EXIT_FAILURE : rc);
-        } else {
-            // x86_64 emulator path — exec wine64 directly.
-            execve(argv[0], const_cast<char* const*>(argv.data()),
-                   const_cast<char* const*>(env_argv.data()));
-            // If execve returns, it failed.
-            _exit(EXIT_FAILURE);
-        }
+        execve(argv[0], const_cast<char* const*>(argv.data()),
+               const_cast<char* const*>(env_argv.data()));
+        // If execve returns, it failed.
+        _exit(EXIT_FAILURE);
     }
 
     // ----- parent -----
@@ -268,7 +258,7 @@ int launch_game(const LaunchOptions* opts) noexcept {
         .wineserver_pid = -1,
         .wine_prefix = opts->wine_prefix,
     });
-    LOGI("wine_bridge: launched wine64 (pid=%d, token=%d) for %s",
+    LOGI("wine_bridge: launched wine (pid=%d, token=%d) for %s",
          pid, token, opts->game_exec);
     return token;
 }

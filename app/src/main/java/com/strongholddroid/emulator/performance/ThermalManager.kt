@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
  * Thermal + frequency governor for the StrongholdDroid process.
  *
  * Strategy:
- *   • Periodically (every 2 s) read /sys/class/thermal/thermal_zone*/temp
+ *   • Periodically (every 2 s) read /sys/class/thermal/thermal_zone<N>/temp
  *     and the CPU frequency of cluster 0
  *   • Maintain a 1-min rolling average so we don't overreact to spikes
  *   • If the rolling average crosses [THROTTLE_TEMP_C], emit a
@@ -53,7 +53,9 @@ class ThermalManager(private val ctx: Context) {
 
     // Sustained performance hint (Android 12+)
     private val powerMgr = ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
-    private var sustainedPerfSession: PowerManager.SustainedPerformanceTimePoint? = null
+    // Sustained-performance hint is a plain boolean on PowerManager
+    // (setSustainedPerformanceMode, API 24+); there is no session API.
+    private var sustainedPerfRequested = false
 
     fun start() {
         // Request sustained performance hint on Android 12+

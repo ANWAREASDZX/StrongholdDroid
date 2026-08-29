@@ -38,19 +38,25 @@ elseif("${ANDROID_ABI}" STREQUAL "x86_64")
     set(ABI_DIR "x86_64")
 else()
     message(FATAL_ERROR
-        "Unsupported ABI: '${ANDROID_ABI}'. StrongholdDroid only ships arm64-v8a "
-        "and x86_64 (the latter only for emulator development).")
+        "Unsupported ABI: '${ANDROID_ABI}'. StrongholdDroid only ships arm64-v8a ")
 endif()
 
 set(PREBUILT_ABI_DIR "${STRONGHOLDDROID_PREBUILT_DIR}/${ABI_DIR}")
 
-# Sanity check — fail loud if prebuilt libs are missing.
-if(NOT EXISTS "${PREBUILT_ABI_DIR}/libbox64.so")
+# Sanity check — fail loud if the native runtime artifacts are missing.
+# NOTE: the wine runtime (wine binary, wineserver, builtin DLLs, box64
+# wow64 cpu dll, gl4es, libpulse, DXVK) is NOT linked into the JNI library
+# — it ships as assets/prebuilt.zip (packaged by scripts/build_apk.sh)
+# and is extracted into filesDir at runtime by EnvironmentBuilder.
+# The wine loader runs as a separate process (fork/exec, see wine_bridge.cpp).
+if(NOT EXISTS "${PREBUILT_ABI_DIR}/libwine/wine" OR NOT EXISTS "${PREBUILT_ABI_DIR}/wow64/wowbox64.dll")
     message(FATAL_ERROR
         "  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
-        "  ! Prebuilt native libraries not found in:\n"
+        "  ! Prebuilt native runtime not found in:\n"
         "  !   ${PREBUILT_ABI_DIR}\n"
-        "  ! Expected libbox64.so, libwine.so, libpulse.so, etc.\n"
+        "  ! Expected libwine/wine, libwine/wineserver, wow64/wowbox64.dll,\n"
+        "  ! wine_dlls/{aarch64-windows,i386-windows,aarch64-unix}/, libpulse.so,\n"
+        "  ! libGL.so, dxvk-wine-dlls/.\n"
         "  !\n"
         "  ! Run scripts/build_all.sh first (or scripts/docker/build.sh)\n"
         "  ! before assembling the APK. See BUILD_GUIDE.md.\n"
@@ -85,31 +91,11 @@ find_library(vulkan-lib vulkan)
 find_library(aaudio-lib aaudio)
 find_library(opensles-lib OpenSLES)
 
-# Pull prebuilt Wine / Box64 / Pulse as imported shared libs.
-add_library(box64 SHARED IMPORTED)
-set_target_properties(box64 PROPERTIES IMPORTED_LOCATION
-    ${PREBUILT_ABI_DIR}/libbox64.so)
-
-add_library(wine SHARED IMPORTED)
-set_target_properties(wine PROPERTIES IMPORTED_LOCATION
-    ${PREBUILT_ABI_DIR}/libwine.so)
-
-# NOTE: wineserver is an ELF executable launched at runtime via fork/exec
-# (see wine_bridge.cpp's launch_game). It is NOT a shared library — there
-# is no libwine_server.so to link against. The previous IMPORTED target
-# pointing at a non-existent libwine_server.so file is removed; if a
-# future build variant needs to dlopen() wineserver as a .so, add an
-# install_lib step in build_wine.sh that produces libwine_server.so and
-# re-enable the IMPORTED target here.
-
-add_library(pulse SHARED IMPORTED)
-set_target_properties(pulse PROPERTIES IMPORTED_LOCATION
-    ${PREBUILT_ABI_DIR}/libpulse.so)
-
-add_library(dxvk_loader SHARED IMPORTED)
-set_target_properties(dxvk_loader PROPERTIES IMPORTED_LOCATION
-    ${PREBUILT_ABI_DIR}/libdxvk_loader.so)
-
+# NOTE: the JNI bridge does NOT link against libwine/libpulse/libbox64:
+#   • wine runs as a separate process (fork/exec in wine_bridge.cpp)
+#   • audio goes through a FIFO owned by AudioBridge (no libpulse calls)
+#   • box64 ships as the wow64 cpu dll (wow64/wowbox64.dll) loaded by wine,
+#     not as a linked library
 target_link_libraries(strongholddroid_jni
     PRIVATE
         ${log-lib}
@@ -119,10 +105,6 @@ target_link_libraries(strongholddroid_jni
         ${vulkan-lib}
         ${aaudio-lib}
         ${opensles-lib}
-        box64
-        wine
-        pulse
-        dxvk_loader
         m
         dl
 )

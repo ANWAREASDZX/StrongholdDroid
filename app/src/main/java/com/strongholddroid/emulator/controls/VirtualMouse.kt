@@ -15,6 +15,7 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import com.strongholddroid.emulator.input.VkTranslator
 
 /**
  * Multi-touch virtual mouse for the RTS overlay.
@@ -320,10 +321,10 @@ class VirtualMouse(
         val now = SystemClock.uptimeMillis()
         if (now - lastArrowSentMs < 1000L / rate) return
         lastArrowSentMs = now
-        if (dxPx < 0) sendArrow(InputBridge.VK_LEFT)
-        if (dxPx > 0) sendArrow(InputBridge.VK_RIGHT)
-        if (dyPx < 0) sendArrow(InputBridge.VK_UP)
-        if (dyPx > 0) sendArrow(InputBridge.VK_DOWN)
+        if (dxPx < 0) sendArrow(VkTranslator.Vk.LEFT)
+        if (dxPx > 0) sendArrow(VkTranslator.Vk.RIGHT)
+        if (dyPx < 0) sendArrow(VkTranslator.Vk.UP)
+        if (dyPx > 0) sendArrow(VkTranslator.Vk.DOWN)
     }
 
     private var lastArrowSentMs = 0L

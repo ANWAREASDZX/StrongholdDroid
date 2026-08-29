@@ -41,10 +41,10 @@ class PerformanceFragment : Fragment() {
 
         lifecycleScope.launch {
             while (isAdded) {
-                val fps = (StrongholdDroidApp.instance.thermalManager.thermalLevel.value
+                val fps = (StrongholdDroidApp.thermalManager.thermalLevel.value
                     .let { level -> if (level > 0) 30 else 60 })  // placeholder until FpsMonitor is wired
                 fpsView.text = "$fps FPS"
-                thermalView.text = "${StrongholdDroidApp.instance.thermalManager.cpuTempC.value.toInt()}°C / lvl ${StrongholdDroidApp.instance.thermalManager.thermalLevel.value}"
+                thermalView.text = "${StrongholdDroidApp.thermalManager.cpuTempC.value.toInt()}°C / lvl ${StrongholdDroidApp.thermalManager.thermalLevel.value}"
                 delay(500)
             }
         }

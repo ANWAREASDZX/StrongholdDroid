@@ -60,6 +60,22 @@ setup_android_env() {
     local bin_dir="$(ndk_toolchain_bin)"
     export PATH="$bin_dir:$PATH"
 
+    # llvm-mingw PE cross-compilers. Wine's PE builtin DLLs (aarch64 +
+    # i386/wow64) and box64's wow64cpu replacement dll are compiled with
+    # aarch64-w64-mingw32-clang / i686-w64-mingw32-clang from llvm-mingw.
+    # Detected from $LLVM_MINGW_BIN or the standard Docker install location.
+    local _mw
+    for _mw in "${LLVM_MINGW_BIN:-}" /opt/llvm-mingw/bin /opt/llvm-mingw-*/bin; do
+        if [[ -n "$_mw" && -x "$_mw/aarch64-w64-mingw32-clang" ]]; then
+            case ":$PATH:" in
+                *":$_mw:"*) ;;
+                *) export PATH="$_mw:$PATH" ;;
+            esac
+            log "  llvm-mingw: $_mw"
+            break
+        fi
+    done
+
     # Wrap the cross-compilers with ccache when it's available.  Wine's
     # ./configure + make uses $CC/$CXX directly, so prefixing with ccache
     # here gives us ~10x rebuild speed without changing the build scripts.

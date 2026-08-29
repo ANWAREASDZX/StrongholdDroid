@@ -34,10 +34,16 @@ mkdir -p "$GL4ES_BUILD"
 cd "$GL4ES_BUILD"
 
 log "Configuring gl4es..."
+# ccache launcher flags are conditional — only when ccache is actually
+# available (the CI Docker image ships it; bare dev boxes may not).
+CCACHE_ARGS=()
+if command -v ccache &>/dev/null; then
+    CCACHE_ARGS+=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+fi
+
 cmake "$GL4ES_SRC" \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    "${CCACHE_ARGS[@]}" \
     -DANDROID_ABI="arm64-v8a" \
     -DANDROID_PLATFORM="android-26" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -50,8 +56,13 @@ cmake "$GL4ES_SRC" \
 log "Compiling gl4es..."
 make -j"$(nproc)"
 
-install_lib "$GL4ES_BUILD/lib/libGL.so.1" "libGL.so.1"
-install_lib "$GL4ES_BUILD/lib/libGL.so"   "libGL.so"
+# gl4es's CMake writes libGL.so.1 into the SOURCE tree's lib/ dir (not the
+# build dir) — and produces no unversioned libGL.so at all.  Stage both
+# names from the actual output location.
+GL4ES_LIB="$GL4ES_SRC/lib/libGL.so.1"
+[[ -f "$GL4ES_LIB" ]] || GL4ES_LIB="$GL4ES_BUILD/lib/libGL.so.1"
+install_lib "$GL4ES_LIB" "libGL.so.1"
+install_lib "$GL4ES_LIB" "libGL.so"
 
 log_ok "gl4es built"
 print_banner "gl4es build complete ✓"

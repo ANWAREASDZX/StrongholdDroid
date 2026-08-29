@@ -43,7 +43,10 @@ android {
                 )
                 cppFlags += listOf("-std=c++17", "-fexceptions", "-frtti")
                 // Aggressive LTO is set per-ABI in release builds below.
-                abiFilters += listOf("arm64-v8a", "x86_64")
+                // NOTE: arm64-v8a ONLY — scripts/build_all.sh produces no
+                // x86_64 prebuilts, and app/src/main/cpp/CMakeLists.txt
+                // hard-fails for any ABI whose prebuilt dir is missing.
+                abiFilters += listOf("arm64-v8a")
             }
         }
 
@@ -52,15 +55,25 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            // Secrets come from env or ~/.gradle/gradle.properties, never the repo.
-            storeFile = file(System.getenv("STRONGHOLDDROID_KEYSTORE") ?: "/dev/null")
-            storePassword = System.getenv("STRONGHOLDDROID_STORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("STRONGHOLDDROID_KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("STRONGHOLDDROID_KEY_PASSWORD") ?: ""
-            enableV1Signing = false
-            enableV2Signing = true
-            enableV3Signing = true
+        // Release signing is ONLY configured when the keystore env vars are
+        // present.  Without this guard AGP would try to read "/dev/null" as
+        // a keystore and every assembleRelease/assembleCi would die with
+        // "Keystore file not found" — the ci buildType inherits from release
+        // via initWith(), so it must stay signable without secrets too.
+        val keystorePath = System.getenv("STRONGHOLDDROID_KEYSTORE")
+        val storePasswordEnv = System.getenv("STRONGHOLDDROID_STORE_PASSWORD")
+        val keyAliasEnv = System.getenv("STRONGHOLDDROID_KEY_ALIAS")
+        val keyPasswordEnv = System.getenv("STRONGHOLDDROID_KEY_PASSWORD")
+        if (keystorePath != null && File(keystorePath).exists()) {
+            create("release") {
+                storeFile = File(keystorePath)
+                storePassword = storePasswordEnv
+                keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
         }
     }
 
@@ -80,7 +93,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // Fall back to the debug keystore when no release secrets are
+            // configured — the release variant stays installable and the
+            // produced APK keeps the standard `app-release.apk` name.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             // Native LTO for faster runtime in release
             externalNativeBuild {
                 cmake {
@@ -97,6 +114,8 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
             matchingFallbacks += listOf("release")
+            // Always debug-signed: CI machines have no release keystore.
+            signingConfig = signingConfigs.getByName("debug")
             externalNativeBuild { cmake { arguments += "-DCMAKE_BUILD_TYPE=RelWithDebInfo" } }
         }
     }

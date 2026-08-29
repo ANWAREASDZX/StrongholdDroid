@@ -7,30 +7,40 @@ import com.strongholddroid.emulator.profiles.GameProfile
 import com.strongholddroid.emulator.profiles.StrongholdCrusaderProfile
 import java.io.File
 import java.io.IOException
+import java.util.zip.ZipInputStream
 
 /**
- * Builds the runtime environment that Wine+box64 expect on Android.
+ * Builds the runtime environment that Wine expects on Android.
+ *
+ * Architecture ("Arm64 Wine WOW64"):
+ * wine itself runs natively (arm64 ELF); the game's 32-bit x86 code is
+ * executed inside the wine process by box64's WoW64 cpu dll (xtajit.dll).
  *
  * Per-game isolation
  * ------------------
  * Every [GameProfile] gets its own WINEPREFIX at
  *   `<filesDir>/prefixes/<profile.slug>`
  * This isolates registry HKEY_CURRENT_USER settings, override DLL cache,
- * and `winetricks`-installed dependencies per game version. SC 1.1 needs
- * ddrawex while SC HD needs DXVK + d3dcompiler — mixing them in one
- * prefix would produce a Frankenstein that crashes 9/10 times.
+ * and per-game native DLL overrides. SC 1.1 needs ddrawex while SC HD
+ * wants DXVK + d3dcompiler — mixing them in one prefix would produce a
+ * Frankenstein that crashes 9/10 times.
  *
- * Asset layout (under app/files):
- *   usr/bin/wine64            ← stripped wine64 binary
- *   usr/bin/wineserver        ← stripped wineserver
- *   usr/lib/libwine.so        ← shared wine lib
- *   usr/lib/wine/x86_64-windows/*.dll  ← builtin Wine DLLs (d3d9, ddraw, dsound, ...)
- *   prefixes/<slug>/          ← per-game WINEPREFIX
- *   dxvk/<slug>/              ← DXVK native DLLs for this prefix
- *   saves/<slug>/<slot>.bin   ← save-states
- *
- * The prebuilt artifacts ship as `assets/prebuilt.tar.gz` inside the APK
- * and are unpacked lazily on first run via [ensureFirstRunExtraction].
+ * Runtime layout (under app/files, extracted from assets/prebuilt.zip):
+ *   usr/bin/wine              ← arm64 ELF wine loader (runs natively)
+ *   usr/bin/wineserver        ← arm64 ELF wineserver
+ *   usr/bin/wineboot, ...     ← other wine programs (all arm64 ELF)
+ *   usr/lib/wine/aarch64-unix  (.so)     ← unix-side libs wine dlopens
+ *   usr/lib/wine/aarch64-windows/      ← native 64-bit builtin PE DLLs
+ *   usr/lib/wine/i386-windows/         ← WoW64 32-bit builtin PE DLLs
+ *   usr/lib/libpulse.so.0    ← pulse stub wine's winepulse.drv links
+ *   usr/lib/libpulsecommon-XX.so
+ *   usr/lib/libGL.so.1       ← gl4es (GL → GLES translation for wined3d)
+ *   usr/share/wine/nls/      ← locale/codepage tables
+ *   wow64/wowbox64.dll       ← box64 WoW64 cpu dll (arm64 PE)
+ *   dxvk-wine-dlls/          <- 32-bit DXVK dlls
+ *   prefixes/<slug>/         ← per-game WINEPREFIX
+ *   dxvk/<slug>/             ← DXVK native DLLs staged for this prefix
+ *   saves/<slug>/<slot>.bin  ← save-states
  */
 object EnvironmentBuilder {
 
@@ -46,6 +56,60 @@ object EnvironmentBuilder {
         prefixDir(StrongholdDroidApp.instance, profile.slug).absolutePath
 
     // ------ Public entry points called from EmulatorCore ------
+
+    /**
+     * Extracts the wine runtime from `assets/prebuilt.zip` (packaged by
+     * scripts/build_apk.sh) into [ctx].filesDir.  Idempotent: a marker
+     * file records the extracted build; re-extraction only happens when
+     * the marker is absent (fresh install or cleared data).
+     *
+     * Contents: usr/bin (wine, wineserver, wineboot, ... — all arm64 ELF),
+     * usr/lib/wine/{aarch64-unix,aarch64-windows,i386-windows},
+     * usr/lib/{libpulse.so.0,libpulsecommon-XX.so,libGL.so.1},
+     * usr/share/wine/nls, wow64/wowbox64.dll, dxvk-wine-dlls/.
+     */
+    fun ensureFirstRunExtraction(ctx: Context) {
+        val marker = File(ctx.filesDir, ".runtime-extracted")
+        val wineBin = File(usrDir(ctx), "bin/wine")
+        if (marker.exists() && wineBin.canExecute()) return
+
+        Log.i(TAG, "Extracting wine runtime from assets/prebuilt.zip ...")
+        val start = System.currentTimeMillis()
+        try {
+            ctx.assets.open("prebuilt.zip").use { asset ->
+                ZipInputStream(asset.buffered()).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        val out = File(ctx.filesDir, entry.name)
+                        // Zip-slip guard: canonical path must stay inside filesDir.
+                        if (!out.canonicalPath.startsWith(ctx.filesDir.canonicalPath + File.separator)) {
+                            throw IOException("bad zip entry: ${entry.name}")
+                        }
+                        if (entry.isDirectory) {
+                            out.mkdirs()
+                        } else {
+                            out.parentFile?.mkdirs()
+                            out.outputStream().use { zis.copyTo(it) }
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            throw IOException("runtime asset extraction failed", e)
+        }
+
+        // Restore the executable bit — zip does not carry unix permissions.
+        File(usrDir(ctx), "bin").listFiles()?.forEach { it.setExecutable(true, false) }
+
+        // Sanity: the wine loader must exist and be runnable.
+        if (!wineBin.canExecute()) {
+            throw IOException("usr/bin/wine missing after extraction")
+        }
+        marker.writeText("extracted-at=${System.currentTimeMillis()}\n")
+        Log.i(TAG, "Runtime extracted in ${System.currentTimeMillis() - start} ms")
+    }
 
     /**
      * Idempotently creates the WINEPREFIX at the path described in [cfg].
@@ -140,6 +204,11 @@ object EnvironmentBuilder {
 
         // Path-like basics (POSIX-internal; Wine will translate to its own PATH)
         list += "PATH" to "${usrDir(ctx)}/bin:${usrDir(ctx)}/lib:${ctx.filesDir}/box64"
+        // LD_LIBRARY_PATH — CRITICAL: wine's unix libs (winepulse.drv etc.)
+        // link against usr/lib/libpulse.so.0 and wined3d dlopens usr/lib/
+        // libGL.so.1 (gl4es); the Android dynamic linker only finds them via
+        // LD_LIBRARY_PATH (there is no ldconfig on Android).
+        list += "LD_LIBRARY_PATH" to "${usrDir(ctx)}/lib"
         list += "HOME" to cfg.winePrefix
         list += "TMPDIR" to ctx.cacheDir.absolutePath
         list += "XDG_DATA_HOME" to ctx.filesDir.absolutePath
@@ -168,8 +237,7 @@ object EnvironmentBuilder {
         // Render target override — used by our internal DXVK fork that
         // reads STRONGHOLDDROID_RENDER_TARGET to size the swapchain.
         if (cfg.renderTargetWidth > 0 && cfg.renderTargetHeight > 0) {
-            list += "STRONGHOLDDROID_RENDER_TARGET"
-                    to "${cfg.renderTargetWidth}x${cfg.renderTargetHeight}"
+            list += "STRONGHOLDDROID_RENDER_TARGET" to "${cfg.renderTargetWidth}x${cfg.renderTargetHeight}"
         }
 
         // Locale — SC expects en-US for unit glyphs
@@ -208,9 +276,22 @@ object EnvironmentBuilder {
     private fun initPrefixBlocking(
         ctx: Context, profile: GameProfile, cfg: EmulatorConfig
     ) {
-        // Delegate to the wine boot helper — this is a subprocess of wine64.
+        // Stage the box64 WoW64 cpu dll BEFORE wineboot runs — wine's
+        // wow64 layer (dlls/wow64/syscall.c load_64bit_module) looks for
+        // the cpu dll at C:\windows\system32\<name>, and on arm64 hosts
+        // the default name is "xtajit.dll" (see get_cpu_dll_name()).
+        // Without it, every 32-bit process dies at startup.
+        stageWow64CpuDll(ctx, cfg)
+
+        // wineboot is a separate arm64 ELF program shipped in the runtime
+        // asset (usr/bin/wineboot) — NOT `wine wineboot` (the wine CLI
+        // would spawn a full loader session just to run a prefix tool).
+        val wineboot = File(usrDir(ctx), "bin/wineboot")
+        if (!wineboot.canExecute()) {
+            throw IOException("wineboot missing at ${wineboot.absolutePath}")
+        }
         val pb = ProcessBuilder(
-            cfg.wineBinary, "wineboot", "--init", "--foreground"
+            wineboot.absolutePath, "--init", "--foreground"
         ).apply {
             environment().putAll(buildEnvList(cfg).toMap())
             redirectErrorStream(true)
@@ -224,10 +305,30 @@ object EnvironmentBuilder {
         val rc = proc.waitFor()
         if (rc != 0) error("wineboot failed with rc=$rc")
 
+        // Re-stage the wow64 cpu dll — wineboot's prefix creation may have
+        // reset drive_c/windows/system32 between the two staging passes.
+        stageWow64CpuDll(ctx, cfg)
+
         // Apply per-profile registry tweaks (this is what the Wine prefix's
         // user.reg file contains — appending here lets us tweak the registry
         // before the game launches).
         applyRegistryTweaks(cfg, profile)
+    }
+
+    /**
+     * Copies the box64 WoW64 cpu dll (wow64/wowbox64.dll from the runtime
+     * asset) into the prefix's 64-bit system dir as `xtajit.dll`.
+     */
+    private fun stageWow64CpuDll(ctx: Context, cfg: EmulatorConfig) {
+        val src = File(ctx.filesDir, "wow64/wowbox64.dll")
+        if (!src.exists()) {
+            Log.w(TAG, "wow64/wowbox64.dll missing — 32-bit games will not run")
+            return
+        }
+        val sys32 = File(cfg.winePrefix, "drive_c/windows/system32")
+        sys32.mkdirs()
+        src.copyTo(File(sys32, "xtajit.dll"), overwrite = true)
+        Log.d(TAG, "staged xtajit.dll (box64 wow64 cpu dll) into prefix")
     }
 
     private fun applyRegistryTweaks(cfg: EmulatorConfig, profile: GameProfile) {

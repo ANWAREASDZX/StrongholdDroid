@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.strongholddroid.emulator.emulator.EmulatorCore
 import com.strongholddroid.emulator.performance.SaveStateManager
 

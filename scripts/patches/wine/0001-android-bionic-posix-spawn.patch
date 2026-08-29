@@ -1,0 +1,66 @@
+diff --git a/dlls/msv1_0/unixlib.c b/dlls/msv1_0/unixlib.c
+index b51dde2..e89903d 100644
+--- a/dlls/msv1_0/unixlib.c
++++ b/dlls/msv1_0/unixlib.c
+@@ -156,6 +156,13 @@ static NTSTATUS ntlm_cleanup( void *args )
+ 
+ static NTSTATUS ntlm_fork( void *args )
+ {
++#ifdef __ANDROID__
++    /* Android bionic libc has no posix_spawn / posix_spawnp before API 28,
++     * and there is no Samba "ntlm_auth" helper binary on Android anyway.
++     * Fail here so wine falls back to its built-in NTLM implementation. */
++    (void)args;
++    return SEC_E_INTERNAL_ERROR;
++#else
+     const struct fork_params *params = args;
+     struct ntlm_ctx *ctx = params->ctx;
+     posix_spawn_file_actions_t file_actions;
+@@ -207,6 +214,7 @@ static NTSTATUS ntlm_fork( void *args )
+     posix_spawn_file_actions_destroy( &file_actions );
+ 
+     return SEC_E_OK;
++#endif /* __ANDROID__ */
+ }
+ 
+ static NTSTATUS ntlm_check_version( void *args )
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+index 803d807..79b9373 100644
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -315,7 +315,19 @@ static int build_path_and_exec( pid_t *pid, const char *dir, const char *name, c
+     int ret;
+ 
+     argv[0] = build_path( dir, name );
++#ifdef __ANDROID__
++    /* Android bionic libc has no posix_spawn before API 28.  Fall back to
++     * plain fork + execv, which is all wine uses this helper for anyway. */
++    *pid = fork();
++    if (*pid == 0)
++    {
++        execv( argv[0], argv );
++        _exit( 127 );
++    }
++    ret = (*pid < 0) ? errno : 0;
++#else
+     ret = posix_spawn( pid, argv[0], NULL, NULL, argv, environ );
++#endif
+     free( argv[0] );
+     return ret;
+ }
+diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
+index 62658fc..8bde754 100644
+--- a/dlls/winepulse.drv/pulse.c
++++ b/dlls/winepulse.drv/pulse.c
+@@ -234,7 +234,11 @@ static NTSTATUS pulse_process_attach(void *args)
+     pthread_mutexattr_t attr;
+ 
+     pthread_mutexattr_init(&attr);
++#ifndef __ANDROID__
++    /* bionic has no pthread_mutexattr_setprotocol — PRIO_INHERIT is only a
++     * real-time scheduling optimization, the default protocol is fine. */
+     pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
++#endif
+ 
+     if (pthread_mutex_init(&pulse_mutex, &attr) != 0)
+         pthread_mutex_init(&pulse_mutex, NULL);

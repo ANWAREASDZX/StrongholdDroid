@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules: ONLY user data (control profiles, game profiles,
+  save states) goes to the cloud backup.  Everything else in filesDir
+  (wine runtime, prefixes, DXVK staging — hundreds of MB) is excluded
+  automatically because it is not listed in any <include>.
+-->
 <full-backup-content>
     <include domain="file" path="control_profiles/"/>
     <include domain="file" path="game_profiles/"/>
     <include domain="file" path="saves/"/>
-    <exclude domain="file" path="prefixes/"/>
-    <exclude domain="file" path="crashes/"/>
 </full-backup-content>

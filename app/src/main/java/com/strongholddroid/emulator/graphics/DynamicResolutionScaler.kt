@@ -3,6 +3,7 @@ package com.strongholddroid.emulator.graphics
 import android.util.Log
 import android.view.Choreographer
 import com.strongholddroid.emulator.emulator.EmulatorConfig
+import com.strongholddroid.emulator.emulator.GraphicsBackend
 import com.strongholddroid.emulator.performance.PerformanceMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,7 @@ import kotlin.math.roundToInt
  * that's typical for naïve step-based scalers.
  */
 class DynamicResolutionScaler(
-    private val cfg: EmulatorConfig.GraphicsBackend.DynamicResolution,
+    private val cfg: GraphicsBackend.DynamicResolution,
     private val baseWidth: Int,
     private val baseHeight: Int,
 ) {

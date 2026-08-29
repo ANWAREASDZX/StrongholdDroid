@@ -120,11 +120,14 @@ jobs:
       - run:
           name: Validate prebuilt artifacts
           command: |
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libwine.so
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libbox64.so
+            test -f app/src/main/cpp/prebuilt/arm64-v8a/libwine/wine
+            test -f app/src/main/cpp/prebuilt/arm64-v8a/libwine/wineserver
+            test -f app/src/main/cpp/prebuilt/arm64-v8a/wow64/wowbox64.dll
             test -f app/src/main/cpp/prebuilt/arm64-v8a/libpulse.so
             test -f app/src/main/cpp/prebuilt/arm64-v8a/libGL.so
-            test -f app/src/main/cpp/prebuilt/arm64-v8a/libdxvk_loader.so
+            test -f app/src/main/cpp/prebuilt/arm64-v8a/wine_dlls/aarch64-windows/kernel32.dll
+            test -f app/src/main/cpp/prebuilt/arm64-v8a/wine_dlls/i386-windows/kernel32.dll
+            test -f app/src/main/cpp/prebuilt/arm64-v8a/wine_dlls/aarch64-unix/ntdll.so
             test -d app/src/main/cpp/prebuilt/arm64-v8a/dxvk-wine-dlls
             echo "All prebuilt artifacts present"
             ls -lh app/src/main/cpp/prebuilt/arm64-v8a/
@@ -153,6 +156,20 @@ jobs:
       - attach_workspace:
           at: ~/project
 
+      # IMPORTANT: the Docker image built in the native-build job does NOT
+      # persist between jobs (each job gets a fresh remote-Docker VM).
+      # The build-apk job must rebuild the image itself — with Docker Layer
+      # Caching enabled this is nearly instant (all layers are warm).
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - run:
+          name: Build Docker image (DLC cache — instant after first build)
+          command: |
+            docker build \
+              -t strongholddroid-builder:latest \
+              -f scripts/docker/Dockerfile.build scripts/docker
+
       - run:
           name: Build debug + ci APKs
           # Same `docker create + cp + start` pattern as native-build —
@@ -165,10 +182,13 @@ jobs:
                 -w /work \
                 strongholddroid-builder:latest \
                 bash -c 'chmod +x /work/scripts/*.sh && /work/scripts/build_apk.sh debug && /work/scripts/build_apk.sh ci'
-            tar --exclude='.git' --exclude='build/ccache' -cf - . \
+            tar --exclude='.git' --exclude='build/ccache' --exclude='app/build' -cf - . \
               | docker cp - apk-builder:/work/
             docker start -a apk-builder
             docker cp apk-builder:/work/app/build/outputs/apk/. ./app/build/outputs/apk/
+            # assets/prebuilt.zip is produced inside the container by
+            # build_apk.sh — copy it back so it shows up in the artifacts.
+            docker cp apk-builder:/work/app/src/main/assets/prebuilt.zip ./app/src/main/assets/prebuilt.zip || true
             docker rm apk-builder
           no_output_timeout: 30m
 

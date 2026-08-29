@@ -1,0 +1,21 @@
+diff --git a/wine/wow64/CMakeLists.txt b/wine/wow64/CMakeLists.txt
+index a8a8365..db40de1 100644
+--- a/wine/wow64/CMakeLists.txt
++++ b/wine/wow64/CMakeLists.txt
+@@ -1,6 +1,16 @@
+ cmake_minimum_required(VERSION 3.13)
+ project(wowbox64 C ASM)
+ 
++# StrongholdDroid: mingw-w64 headers redirect the printf family to
++# __mingw_* when __USE_MINGW_ANSI_STDIO is on (the default with modern
++# llvm-mingw).  ntdll.def already provides sprintf/vsprintf/_vsnprintf
++# imports, but crt.c only implements __mingw_sprintf — NOT the v
++# variants — so the link fails with "undefined symbol: __mingw_vsprintf".
++# Disabling the redirect routes every printf call straight to ntdll.
++# NOTE: must precede every add_library() — directory compile options only
++# apply to targets created after the call.
++add_compile_options(-D__USE_MINGW_ANSI_STDIO=0)
++
+ if(${CMAKE_VERSION} VERSION_LESS "3.12.2")
+     find_package(PythonInterp 3)
+     if(NOT PYTHONINTERP_FOUND)

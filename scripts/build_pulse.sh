@@ -87,6 +87,18 @@ static inline const char *textdomain(const char *domainname) { return domainname
 #endif
 EOF
 
+# ---- pkg-config isolation ---------------------------------------------------
+# NEVER let the build see host .pc files.  On dev boxes with libsndfile1-dev
+# installed, pkg-config resolves `sndfile` to the HOST's x86_64 lib and injects
+# `-I/usr/include/opus -I/usr/include/x86_64-linux-gnu` into the cross-compile
+# flags — host glibc headers + NDK bionic headers = fatal error
+# ("function-like macro '__GNUC_PREREQ' is not defined" from sys/cdefs.h).
+# The CI container is bare (no libsndfile-dev) so it worked there by accident.
+# An empty PKG_CONFIG_LIBDIR makes pkg-config find NOTHING, which matches
+# the CI environment exactly.
+export PKG_CONFIG_LIBDIR=""
+export PKG_CONFIG_PATH=""
+
 log "Configuring PulseAudio (meson)..."
 # PulseAudio v16.1 meson_options.txt — valid options we use:
 #   -Ddaemon=false        — we don't ship a daemon, only the client lib
@@ -177,44 +189,51 @@ echo 'subdir_done()' > "$PA_SRC/src/utils/meson.build"
 sed -i "s|versioning_link_args = .*|versioning_link_args = []|" \
     "$PA_SRC/src/pulse/meson.build"
 
-meson setup "$PA_SRC" . \
-    --cross-file android-cross.txt \
-    --default-library=shared \
-    --buildtype=release \
-    -Ddaemon=false \
-    -Ddoxygen=false \
-    -Dman=false \
-    -Dtests=false \
-    -Ddatabase=simple \
-    -Dx11=disabled \
-    -Dalsa=disabled \
-    -Dasyncns=disabled \
-    -Davahi=disabled \
-    -Dbluez5=disabled \
-    -Ddbus=disabled \
-    -Delogind=disabled \
-    -Dfftw=disabled \
-    -Dglib=disabled \
-    -Dgsettings=disabled \
-    -Dgstreamer=disabled \
-    -Dgtk=disabled \
-    -Dhal-compat=false \
-    -Djack=disabled \
-    -Dlirc=disabled \
-    -Dopenssl=disabled \
-    -Dorc=disabled \
-    -Doss-output=disabled \
-    -Dsamplerate=disabled \
-    -Dsoxr=disabled \
-    -Dspeex=disabled \
-    -Dsystemd=disabled \
-    -Dtcpwrap=disabled \
-    -Dudev=disabled \
-    -Dvalgrind=disabled \
-    -Dwebrtc-aec=disabled \
-    -Dadrian-aec=false \
-    -Dc_args="-I${STUB_DIR}" \
-    -Dcpp_args="-I${STUB_DIR}"
+# Resume-safety: if meson already configured this build dir (e.g. a retried
+# CI job or a local re-run after a timeout), skip `meson setup` — it refuses
+# to reconfigure an existing builddir and ninja resumes incrementally.
+if [[ -f "$PA_BUILD/build.ninja" ]]; then
+    log "meson build dir already configured — resuming incremental build"
+else
+    meson setup "$PA_SRC" . \
+        --cross-file android-cross.txt \
+        --default-library=shared \
+        --buildtype=release \
+        -Ddaemon=false \
+        -Ddoxygen=false \
+        -Dman=false \
+        -Dtests=false \
+        -Ddatabase=simple \
+        -Dx11=disabled \
+        -Dalsa=disabled \
+        -Dasyncns=disabled \
+        -Davahi=disabled \
+        -Dbluez5=disabled \
+        -Ddbus=disabled \
+        -Delogind=disabled \
+        -Dfftw=disabled \
+        -Dglib=disabled \
+        -Dgsettings=disabled \
+        -Dgstreamer=disabled \
+        -Dgtk=disabled \
+        -Dhal-compat=false \
+        -Djack=disabled \
+        -Dlirc=disabled \
+        -Dopenssl=disabled \
+        -Dorc=disabled \
+        -Doss-output=disabled \
+        -Dsamplerate=disabled \
+        -Dsoxr=disabled \
+        -Dspeex=disabled \
+        -Dsystemd=disabled \
+        -Dtcpwrap=disabled \
+        -Dudev=disabled \
+        -Dvalgrind=disabled \
+        -Dwebrtc-aec=disabled \
+        -Dadrian-aec=false \
+        -Dc_args="-I${STUB_DIR}" \
+        -Dcpp_args="-I${STUB_DIR}"
+fi
 
 log "Compiling PulseAudio..."
 ninja -j"$(nproc)"
@@ -295,6 +314,19 @@ for f in libpulse.so.0 libpulse.so libpulse-simple.so.0 libpulse-simple.so; do
     fi
 done
 # libpulsecommon-*.so has a version-suffixed name that varies; glob it.
+# NOTE: meson installs it into $libdir/pulseaudio/ (privlibdir), not $libdir.
+# Normalize it to $PULSE_LIB_DIR (top level) first so Wine's -L$libdir link
+# search and the parent-dir symlinks both resolve consistently.
+if [[ -d "$PULSE_LIB_DIR/pulseaudio" ]]; then
+    for f in "$PULSE_LIB_DIR/pulseaudio"/libpulsecommon-*.so; do
+        [[ -e "$f" || -L "$f" ]] || continue
+        base="$(basename "$f")"
+        if [[ ! -e "$PULSE_LIB_DIR/$base" ]]; then
+            cp -f "$f" "$PULSE_LIB_DIR/$base"
+            log "  normalized: $PULSE_LIB_DIR/$base (from pulseaudio/ subdir)"
+        fi
+    done
+fi
 for f in "$PULSE_LIB_DIR"/libpulsecommon-*.so; do
     [[ -e "$f" || -L "$f" ]] || continue
     base="$(basename "$f")"

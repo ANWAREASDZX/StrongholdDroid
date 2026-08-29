@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ data extraction rules (cloud backup + device transfer).
+  Only user-created data is transferable; the extracted wine runtime
+  (usr/, dxvk/, wow64/) and per-game WINEPREFIX trees are reproducible
+  from the APK asset and deliberately omitted.
+-->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="file" path="control_profiles/"/>
         <include domain="file" path="game_profiles/"/>
         <include domain="file" path="saves/"/>
-        <exclude domain="file" path="prefixes/"/>
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="control_profiles/"/>
+        <include domain="file" path="game_profiles/"/>
         <include domain="file" path="saves/"/>
-        <exclude domain="file" path="prefixes/"/>
-        <exclude domain="file" path="usr/"/>
-        <exclude domain="file" path="dxvk/"/>
     </device-transfer>
 </data-extraction-rules>

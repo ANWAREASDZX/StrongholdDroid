@@ -60,7 +60,7 @@ class GameInstaller(private val ctx: Context) {
             val targetRoot = File(driveCRoot(profile.slug),
                 "${profile.slug.replace("stronghold_crusader_", "Stronghold_Crusader_")}_Install")
             targetRoot.mkdirs()
-            tempDir.copyRecursivelyTo(targetRoot, overwrite = true)
+            tempDir.copyRecursively(targetRoot, overwrite = true)
 
             Log.i(tag, "installed ${profile.displayName} → ${targetRoot.absolutePath} " +
                 "(confidence=${conf})")

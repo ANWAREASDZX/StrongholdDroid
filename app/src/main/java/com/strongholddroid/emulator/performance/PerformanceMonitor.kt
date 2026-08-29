@@ -59,12 +59,12 @@ class PerformanceMonitor(
     fun stop() { job?.cancel(); scope.cancel() }
 
     /** Called from [com.strongholddroid.emulator.graphics.FpsMonitor] every frame. */
-    fun onFrame(frameNanos: Long) {
+    fun onFrame(tsNanos: Long) {
         synchronized(frameNanos) {
             if (frameNanos.size == FRAME_WINDOW) frameNanos.removeFirst()
-            frameNanos.addLast(frameNanos)
+            frameNanos.addLast(tsNanos)
         }
-        _pressure.tryEmit(PressureEvent.Frame(frameNanos))
+        _pressure.tryEmit(PressureEvent.Frame(tsNanos))
     }
 
     /** Called from [com.strongholddroid.emulator.emulator.ProcessMonitor] when

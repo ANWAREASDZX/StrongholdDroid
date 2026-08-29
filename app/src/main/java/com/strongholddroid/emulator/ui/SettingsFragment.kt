@@ -36,7 +36,7 @@ class SettingsFragment : Fragment() {
             setPreferencesFromResource(R.xml.preferences, rootKey)
 
             findPreference<Preference>("diag_verify_binaries")?.setOnPreferenceClickListener {
-                val mgr = com.strongholddroid.emulator.StrongholdDroidApp.instance.containerManager
+                val mgr = com.strongholddroid.emulator.StrongholdDroidApp.containerManager
                 val issues = mgr.verifyRuntime()
                 val msg = if (issues.isEmpty()) "All binaries present ✓"
                           else issues.joinToString("\n") { it.toString() }

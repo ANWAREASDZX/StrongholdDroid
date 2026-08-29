@@ -36,7 +36,6 @@ data class GameProfile(
     val knownIssues: List<String> = emptyList(),
 ) : Parcelable {
 
-    @Parcelize
     @Serializable
     enum class GraphicsApi { DIRECT_X_7, DIRECT_X_9, DIRECT_X_9_EX }
 

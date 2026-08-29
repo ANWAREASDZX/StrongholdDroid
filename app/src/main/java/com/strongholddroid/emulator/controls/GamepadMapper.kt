@@ -7,6 +7,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import com.strongholddroid.emulator.input.InputBridge
 import com.strongholddroid.emulator.input.VkTranslator
+import kotlin.math.sign
 
 /**
  * Bridges external physical controllers (Xbox/PS5/8BitDo gamepads) to
@@ -63,15 +64,8 @@ class GamepadMapper(
                 if (!rmbDown) { rmbDown = true; InputBridge.mouseButton(0, true,
                     InputBridge.BTN_RIGHT, 0.5f, 0.5f) }
             }
-            ControlProfile.GamepadAction.VK_KEY_W, ControlProfile.GamepadAction.VK_KEY_A,
-            ControlProfile.GamepadAction.VK_KEY_S, ControlProfile.GamepadAction.VK_KEY_D,
-            ControlProfile.GamepadAction.VK_KEY_B, ControlProfile.GamepadAction.VK_KEY_H,
-            ControlProfile.GamepadAction.VK_KEY_Q, ControlProfile.GamepadAction.VK_KEY_E,
-            ControlProfile.GamepadAction.VK_KEY_1, ControlProfile.GamepadAction.VK_KEY_2,
-            ControlProfile.GamepadAction.VK_KEY_SPACE, ControlProfile.GamepadAction.VK_KEY_F1,
-            ControlProfile.GamepadAction.VK_KEY_F2,
-            ControlProfile.GamepadAction.VK_ESCAPE, ControlProfile.GamepadAction.VK_PAUSE -> {
-                val vk = (action as ControlProfile.GamepadAction.VK_KEY).vk
+            is ControlProfile.GamepadAction.VK_KEY -> {
+                val vk = action.vk
                 val androidKc = vk.toAndroidKeycode() ?: return false
                 if (heldArrows.add(vk)) {
                     InputBridge.keyFromAndroid(KeyEvent(KeyEvent.ACTION_DOWN, androidKc))

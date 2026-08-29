@@ -1,102 +1,102 @@
 #!/usr/bin/env bash
 #
-# build_dxvk.sh — build DXVK 2.x and its associated MinGW Windows DLLs
-# (d3d9.dll, d3d10core.dll, d3d11.dll, dxgi.dll).
+# build_dxvk.sh — build DXVK 2.x MinGW Windows DLLs (32-bit).
 #
-# DXVK is the heart of the graphics pipeline for SC HD / Extreme —
-# it converts DirectX 9/10/11 calls to Vulkan on the fly.
+# DXVK is the graphics fast-path for D3D8/9 games (d3d8.dll, d3d9.dll,
+# dxgi.dll).  Stronghold Crusader itself is DirectDraw (wined3d → gl4es),
+# but SC HD/Extreme mods and other RTS titles of the era can use D3D9 —
+# we ship the 32-bit DXVK dlls so wine's WINEDLLOVERRIDES can pick them.
 #
-# Build strategy:
-#   1. Wine's MinGW headers (we just built) are required to compile DXVK
-#   2. DXVK ships its own Vulkan-Hpp + MinGW headers for self-containment
-#   3. Cross-compile with x86_64-w64-mingw32-gcc — produces Windows .dll
-#   4. The Vulkan *loader* (libvulkan.so) is built separately as a normal
-#      Android shared lib (we don't ship the full SDK — only the loader)
+# IMPORTANT: we build the x86 (32-bit) variant ONLY:
+#   • The Windows side of our runtime is 32-bit — Stronghold Crusader is
+#     a 32-bit x86 app running through wine's WoW64 layer (see
+#     build_wine.sh: --enable-archs=aarch64,i386 + box64's wow64 cpu dll).
+#     A 32-bit game can only ever load 32-bit d3d9.dll from syswow64.
+#   • 64-bit Windows apps are not runnable in this architecture at all
+#     (they'd need an arm64ec cpu.dll, which box64 does not ship yet),
+#     so x64 DXVK dlls would be dead weight (halves the CI build time).
+#
+# Toolchain: i686-w64-mingw32-gcc — either Ubuntu's `mingw-w64` package
+# (CI image) or llvm-mingw's gcc alias (bare dev boxes).
 #
 # Output:
-#   prebuilt/arm64-v8a/libdxvk_loader.so        ← the Android-side Vulkan loader
-#   prebuilt/arm64-v8a/dxvk-wine-dlls/*.dll     ← native Windows DLLs staged
-#                                                   for the WINEPREFIX
+#   prebuilt/arm64-v8a/dxvk-wine-dlls/*.dll  (32-bit PE, staged into the
+#   WINEPREFIX's syswow64 at runtime by EnvironmentBuilder)
 #
-# Build time: ~25 min (DXVK is huge).
+# Build time: ~6 min (x86 only).
 #
 set -euo pipefail
 
 source "$(dirname "$0")/lib/common.sh"
-print_banner "Building DXVK 2.x + Vulkan Loader"
+print_banner "Building DXVK 2.x (MinGW x86 32-bit DLLs)"
 
-setup_android_env
+setup_android_env   # sets ANDROID_NDK_HOME etc. (DXVK itself doesn't need it,
+                    # but keeping env consistent helps ccache + logging)
 
 DXVK_VERSION="${DXVK_VERSION:-v2.4.1}"
 DXVK_SRC="$BUILD_DIR/dxvk-$DXVK_VERSION"
-DXVK_BUILD="$BUILD_DIR/dxvk-mingw-x86_64"
+DXVK_BUILD="$BUILD_DIR/dxvk-mingw-x86"
+DXVK_STAGE="$DXVK_BUILD/dxvk-$DXVK_VERSION"
 
-# ---- 1. DXVK source (MinGW path) -------------------------------------------
+# ---- 1. DXVK source (WITH submodules!) --------------------------------------
 if [[ ! -d "$DXVK_SRC/.git" ]]; then
-    log "Cloning DXVK $DXVK_VERSION..."
-    git clone --depth 1 --branch "$DXVK_VERSION" \
+    log "Cloning DXVK $DXVK_VERSION (with submodules)..."
+    # --recurse-submodules is CRITICAL: include/vulkan (Vulkan-Headers),
+    # include/native/directx (mingw-directx-headers), include/spirv
+    # (SPIRV-Headers) and subprojects/libdisplay-info are submodules.
+    # A plain clone leaves them empty and meson fails with
+    # "vulkan/vulkan.h: No such file or directory".
+    git clone --depth 1 --recurse-submodules --shallow-submodules \
+        --branch "$DXVK_VERSION" \
         https://github.com/doitsujin/dxvk.git "$DXVK_SRC"
 fi
 
-# ---- 2. Build DXVK as MinGW Windows DLLs ----------------------------------
-log "Building DXVK MinGW DLLs..."
+# ---- 2. Sanity: mingw cross compiler present? -------------------------------
+if ! command -v i686-w64-mingw32-gcc &> /dev/null; then
+    die "i686-w64-mingw32-gcc not found. Install the 'mingw-w64' package
+(Ubuntu: apt install mingw-w64 mingw-w64-tools) or llvm-mingw (see
+scripts/docker/Dockerfile.build and scripts/lib/common.sh)."
+fi
+log_ok "mingw: $(i686-w64-mingw32-gcc --version | head -1)"
+
+# ---- 3. Build DXVK x86-only -------------------------------------------------
+# We invoke meson directly (mirroring package-release.sh's build_arch 32)
+# so we can skip the x64 build entirely.
+log "Configuring DXVK (meson, cross=i686-w64-mingw32)..."
+rm -rf "$DXVK_BUILD/build.32"   # meson setup refuses a dirty build dir
 mkdir -p "$DXVK_BUILD"
-cd "$DXVK_BUILD"
 
-# DXVK ships a build-wine64.sh script that wraps meson + mingw
-"$DXVK_SRC/package-release.sh" \
-    --build-dir "$DXVK_BUILD" \
-    --no-package \
-    --destdir "$DXVK_BUILD/install" \
-    1>&2  # script uses bashdb-style logging
+meson setup "$DXVK_BUILD/build.32" "$DXVK_SRC" \
+    --cross-file "$DXVK_SRC/build-win32.txt" \
+    --buildtype "release" \
+    --prefix "$DXVK_STAGE" \
+    --strip \
+    --bindir "x32" \
+    --libdir "x32" \
+    -Dbuild_id=false
 
-# Collect the dlls
+log "Compiling DXVK x86 (this takes ~6 min)..."
+ninja -C "$DXVK_BUILD/build.32" install
+
+# ---- 4. Collect the DLLs ----------------------------------------------------
 DXVK_DLL_OUT="$PREBUILT_DIR/arm64-v8a/dxvk-wine-dlls"
 mkdir -p "$DXVK_DLL_OUT"
-for dll in d3d9 d3d10core d3d11 dxgi d3dcompiler_47; do
-    src="$DXVK_BUILD/install/usr/lib/wine/x86_64-windows/$dll.dll"
+FOUND=0
+for dll in d3d8 d3d9 d3d10core d3d11 dxgi d3dcompiler_47; do
+    src="$DXVK_STAGE/x32/$dll.dll"
     if [[ -f "$src" ]]; then
         cp -f "$src" "$DXVK_DLL_OUT/"
-        log "  installed: $dll.dll"
+        log "  installed: $dll.dll (x86)"
+        FOUND=$((FOUND+1))
     else
-        warn "missing $dll.dll from DXVK build"
+        # d3d10core + d3dcompiler_47 may legitimately be absent in a
+        # given DXVK release — warn but don't fail.
+        warn "missing $dll.dll from DXVK build (may be normal for this release)"
     fi
 done
-
-# ---- 3. Vulkan Loader (Android-side libvulkan.so shim) ---------------------
-# The Android system already provides libvulkan.so on Vulkan 1.1+ devices.
-# We do NOT ship a replacement. Instead, we ship a *loader* that DXVK
-# links against that resolves to the system Vulkan at runtime via dlopen.
-# This way DXVK's PE binaries can be MinGW-compiled without depending
-# on Android's libvulkan directly.
-
-# NOTE: The actual tag on KhronosGroup/Vulkan-Loader is `vulkan-sdk-1.3.283.0`
-# (with the `vulkan-sdk-` prefix and `.0` patch suffix). The older
-# `sdk-1.3.283` tag pattern was retired after sdk-1.3.261.x — using it
-# fails with "Remote branch sdk-1.3.283 not found in upstream origin".
-VULKAN_LOADER_SRC="$BUILD_DIR/vulkan-loader-android"
-if [[ ! -d "$VULKAN_LOADER_SRC/.git" ]]; then
-    log "Cloning Vulkan-Loader shim (tag vulkan-sdk-1.3.283.0)..."
-    git clone --depth 1 --branch vulkan-sdk-1.3.283.0 \
-        https://github.com/KhronosGroup/Vulkan-Loader.git "$VULKAN_LOADER_SRC"
+if [[ "$FOUND" -eq 0 ]]; then
+    die "no DXVK DLLs were produced — check the meson log at $DXVK_BUILD/build.32/meson-logs/"
 fi
 
-VULKAN_LOADER_BUILD="$BUILD_DIR/vulkan-loader-android-arm64"
-mkdir -p "$VULKAN_LOADER_BUILD"
-cd "$VULKAN_LOADER_BUILD"
-
-cmake "$VULKAN_LOADER_SRC" \
-    -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DANDROID_ABI="arm64-v8a" \
-    -DANDROID_PLATFORM="android-26" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTS=OFF \
-    -DUPDATE_DEPS=OFF
-make -j"$(nproc)"
-
-install_lib "$VULKAN_LOADER_BUILD/loader/libvulkan.so" "libdxvk_loader.so"
-
-log_ok "DXVK + Vulkan loader built"
+log_ok "DXVK built: $FOUND DLL(s) staged at $DXVK_DLL_OUT"
 print_banner "DXVK build complete ✓"

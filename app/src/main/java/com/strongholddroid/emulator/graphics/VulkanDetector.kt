@@ -4,7 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import org.jetbrains.kotlinx.serialization.json.*
+import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
