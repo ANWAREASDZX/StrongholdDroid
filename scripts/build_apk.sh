@@ -33,6 +33,8 @@ EXPECTED_FILES=(
     wine_dlls/aarch64-windows/kernel32.dll
     wine_dlls/i386-windows/kernel32.dll
     wine_dlls/aarch64-unix/ntdll.so
+    wine_dlls/aarch64-unix/winex11.so
+    x11-libs/libX11.so
 )
 for f in "${EXPECTED_FILES[@]}"; do
     if [[ ! -f "$PREBUILT_DIR/arm64-v8a/$f" ]]; then
@@ -65,27 +67,62 @@ cp -f "$PRE/usr/arm64-v8a/bin/"* "$RUNTIME_STAGE/usr/bin/" 2>/dev/null || true
 [[ -f "$RUNTIME_STAGE/usr/bin/wine" ]] || die "wine binary missing from install tree"
 
 # 2. Runtime shared libraries (linked/dlopened by wine at runtime).
-for f in libpulse.so.0 libpulse-simple.so.0 libGL.so.1; do
-    if [[ -f "$PRE/lib/$f" ]]; then
-        cp -f "$PRE/lib/$f" "$RUNTIME_STAGE/usr/lib/$f"
-    elif [[ -f "$PRE/$f" ]]; then
-        cp -f "$PRE/$f" "$RUNTIME_STAGE/usr/lib/$f"
-    else
-        warn "  runtime lib not found: $f"
-    fi
+#    NOTE: use cp -L (dereference symlinks) and search BOTH layouts —
+#    build_pulse.sh installs into lib/ and adds convenience symlinks at
+#    the parent dir; a plain -f test on a symlink fails when only the
+#    link exists in one location, which silently dropped libpulse.so.0
+#    from v0.1.0's runtime (broke winepulse audio).
+copy_runtime_lib() {  # copy_runtime_lib <libname>
+    local f="$1"
+    for cand in "$PRE/lib/$f" "$PRE/$f" \
+                "$PRE/lib/${f%.so}.so.0" "$PRE/${f%.so}.so.0"; do
+        if [[ -e "$cand" ]]; then
+            cp -fL "$cand" "$RUNTIME_STAGE/usr/lib/$f"
+            return 0
+        fi
+    done
+    warn "  runtime lib not found anywhere: $f"
+    return 1
+}
+for f in libpulse.so.0 libpulse-simple.so.0 libGL.so.1 libpulse.so; do
+    copy_runtime_lib "$f" || true
 done
-for f in "$PRE/lib/"libpulsecommon-*.so; do
-    [[ -e "$f" ]] && cp -f "$f" "$RUNTIME_STAGE/usr/lib/"
+for f in "$PRE/lib/"libpulsecommon-*.so "$PRE/"libpulsecommon-*.so; do
+    [[ -e "$f" ]] && cp -fL "$f" "$RUNTIME_STAGE/usr/lib/" && break
 done
+# Also ship the pkg-config-free linker name libpulse.so.0 under its plain
+# SONAME — winepulse.so records NEEDED libpulse.so.0.
+for f in "$PRE/lib/"libpulse.so.0* "$PRE/"libpulse.so.0*; do
+    [[ -e "$f" ]] && cp -fL "$f" "$RUNTIME_STAGE/usr/lib/libpulse.so.0" && break
+done
+
+# 2b. X11 client libraries — winex11.so NEEDs libX11.so/libXext.so/... at
+#     dlopen time; the app sets LD_LIBRARY_PATH=<filesDir>/usr/lib.
+X11_LIB_COUNT=0
+if [[ -d "$PRE/x11-libs" ]]; then
+    for f in "$PRE/x11-libs/"*.so; do
+        [[ -e "$f" ]] && { cp -f "$f" "$RUNTIME_STAGE/usr/lib/"; X11_LIB_COUNT=$((X11_LIB_COUNT+1)); }
+    done
+fi
+log_ok "  X11 client libs packaged: $X11_LIB_COUNT"
+[[ "$X11_LIB_COUNT" -ge 10 ]] || die "too few X11 libs ($X11_LIB_COUNT < 10) — winex11.drv cannot load"
 
 # 3. Wine builtin DLLs + unix libs (from the staged wine_dlls tree).
 cp -af "$PRE/wine_dlls/aarch64-unix"     "$RUNTIME_STAGE/usr/lib/wine/"
 cp -af "$PRE/wine_dlls/aarch64-windows"  "$RUNTIME_STAGE/usr/lib/wine/"
 cp -af "$PRE/wine_dlls/i386-windows"     "$RUNTIME_STAGE/usr/lib/wine/"
 
-# 4. NLS data (wine loads locale/codepage tables from here at runtime).
+# 4. NLS data + FONTS (wine loads locale/codepage tables and its bitmap
+#    fonts from here at runtime — without fonts, wine message boxes and
+#    game dialogs render no text at all).
 cp -af "$PRE/usr/share/wine/nls" "$RUNTIME_STAGE/usr/share/wine/" 2>/dev/null \
     || warn "wine nls dir not found in install tree"
+if [[ -d "$PRE/usr/share/wine/fonts" ]]; then
+    cp -af "$PRE/usr/share/wine/fonts" "$RUNTIME_STAGE/usr/share/wine/"
+    log_ok "  wine fonts packaged: $(ls "$RUNTIME_STAGE/usr/share/wine/fonts" | wc -l) files"
+else
+    warn "wine fonts dir not found in install tree — wine dialogs will show no text"
+fi
 
 # 5. box64 wow64 cpu dll + DXVK dlls.
 cp -f "$PRE/wow64/wowbox64.dll" "$RUNTIME_STAGE/wow64/"

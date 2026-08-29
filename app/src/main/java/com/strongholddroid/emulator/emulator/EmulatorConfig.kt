@@ -59,6 +59,12 @@ data class EmulatorConfig(
 
     /** Save-state slot to load on launch (-1 = fresh boot). */
     val saveStateSlot: Int = -1,
+
+    /**
+     * X11 display for winex11.drv.  Empty means the default
+     * "127.0.0.1:0" (XServer XSDL / Termux:X11 TCP port 6000).
+     */
+    val xDisplay: String = "",
 ) : Parcelable
 
 /** Selects how DX7 → modern API translation happens. */

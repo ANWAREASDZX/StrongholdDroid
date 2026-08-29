@@ -44,6 +44,20 @@ object EmulatorCore {
 
     private const val TAG = "EmulatorCore"
 
+    /** Launch phases surfaced to the GameManager UI. */
+    sealed class LaunchPhase {
+        object Idle : LaunchPhase()
+        object ExtractingRuntime : LaunchPhase()
+        object InitializingPrefix : LaunchPhase()
+        object Starting : LaunchPhase()
+        object Running : LaunchPhase()
+        data class Exited(val exitCode: Int) : LaunchPhase()
+        data class Failed(val message: String) : LaunchPhase()
+    }
+
+    private val _phase = MutableStateFlow<LaunchPhase>(LaunchPhase.Idle)
+    val phase: StateFlow<LaunchPhase> = _phase.asStateFlow()
+
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
@@ -61,6 +75,11 @@ object EmulatorCore {
     /**
      * Launches the game described by [profile], optionally restoring the
      * save-state at slot [saveSlot]. Returns the resolved [EmulatorConfig].
+     *
+     * Progress is published through [phase] so the UI can show what the
+     * (potentially minutes-long) first launch is doing — v0.1.0 showed
+     * nothing at all and users could not tell a working launch from a
+     * dead one.
      */
     suspend fun launch(profile: GameProfile, saveSlot: Int): EmulatorConfig =
         withContext(Dispatchers.IO) {
@@ -71,6 +90,7 @@ object EmulatorCore {
                 _running.value = true
                 _exitCode.value = null
                 stopRequested.set(false)
+                _phase.value = LaunchPhase.ExtractingRuntime
 
                 // 1. Resolve config
                 val backend = GraphicsBackendSelector.select(ctx, profile)
@@ -88,12 +108,14 @@ object EmulatorCore {
                 // 2. Build environment
                 //    (first call also extracts assets/prebuilt.zip → filesDir)
                 EnvironmentBuilder.ensureFirstRunExtraction(ctx)
+                _phase.value = LaunchPhase.InitializingPrefix
                 EnvironmentBuilder.ensureWinePrefix(ctx, profile, cfg)
                 EnvironmentBuilder.ensureBox64Environment(ctx, cfg)
                 EnvironmentBuilder.ensureDXVKDlls(ctx, profile, cfg)
 
                 // 3. Start audio renderer BEFORE launching Wine — Wine will
                 //    block on the FIFO until we're ready to read.
+                _phase.value = LaunchPhase.Starting
                 audioSession = AudioBridge.start(cfg)
 
                 // 4. Launch Wine
@@ -102,6 +124,7 @@ object EmulatorCore {
                     AudioBridge.stop(audioSession); audioSession = 0
                     error("Wine launch failed: ${WineLauncher.lastError()}")
                 }
+                _phase.value = LaunchPhase.Running
 
                 // 5. Start the input pump + fps monitor
                 pumpJob = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
@@ -127,10 +150,12 @@ object EmulatorCore {
                 val rc = WineLauncher.waitForExit(pid)
                 _exitCode.value = rc
                 exitDeferred.complete(rc)
+                _phase.value = LaunchPhase.Exited(rc)
 
                 cfg
             } catch (t: Throwable) {
                 Log.e(TAG, "launch failed", t)
+                _phase.value = LaunchPhase.Failed(t.message ?: t.javaClass.simpleName)
                 cleanupAfterExit()
                 throw t
             }

@@ -90,15 +90,26 @@ void forget_pid(int token) {
     pthread_mutex_unlock(&g_pids_lock);
 }
 
-// Per-child process: pump child stdout/stderr → logcat.
+// Per-child process: pump child stdout/stderr → logcat + wine log file.
 // Runs in its own pthread; lifetime = lifetime of the child.
+struct PumpArgs {
+    int fd;
+    std::string log_path;  // empty → logcat only
+};
+
 void* log_pump_thread(void* arg) {
-    int* pipe_fd_ptr = static_cast<int*>(arg);
-    int fd = *pipe_fd_ptr;
-    delete pipe_fd_ptr;
+    PumpArgs* args = static_cast<PumpArgs*>(arg);
+    int fd = args->fd;
+    std::string log_path = std::move(args->log_path);
+    delete args;
 
     FILE* fp = fdopen(fd, "r");
     if (!fp) { close(fd); return nullptr; }
+
+    // Keep one FILE* open for the whole lifetime — O_APPEND keeps
+    // interleaved appends from the wineboot logger (also in this process)
+    // line-atomic.
+    FILE* log_fp = log_path.empty() ? nullptr : fopen(log_path.c_str(), "a");
 
     char* line = nullptr;
     size_t cap = 0;
@@ -106,17 +117,23 @@ void* log_pump_thread(void* arg) {
         // Strip trailing newline
         line[strcspn(line, "\r\n")] = 0;
         __android_log_write(ANDROID_LOG_INFO, "wine-stdout", line);
+        if (log_fp) {
+            fputs(line, log_fp);
+            fputc('\n', log_fp);
+            fflush(log_fp);
+        }
     }
     free(line);
     fclose(fp);
+    if (log_fp) fclose(log_fp);
     return nullptr;
 }
 
-int spawn_log_pump(int child_stdout_fd) {
-    int* fd_ptr = new int(child_stdout_fd);
+int spawn_log_pump(int child_stdout_fd, const std::string& log_path) {
+    PumpArgs* args = new PumpArgs{child_stdout_fd, log_path};
     pthread_t thr;
-    if (pthread_create(&thr, nullptr, log_pump_thread, fd_ptr) != 0) {
-        delete fd_ptr;
+    if (pthread_create(&thr, nullptr, log_pump_thread, args) != 0) {
+        delete args;
         return -1;
     }
     pthread_detach(thr);
@@ -131,10 +148,23 @@ bool build_env_vector(const strongholddroid::wine::LaunchOptions* opts,
         storage.emplace_back(opts->env_kv[i]);
     }
     // Always set these defaults — Wine behaves badly without them.
+    // NOTE: only add WINEDEBUG when the caller (Kotlin) did not supply
+    // one — the app sets a diagnostic-friendly channel set so launch
+    // failures are visible in the in-app log viewer.
+    bool has_winedebug = false;
+    bool have_dll_overrides = false;
+    for (const auto& s : storage) {
+        if (s.rfind("WINEDEBUG=", 0) == 0) { has_winedebug = true; }
+        if (s.rfind("WINEDLLOVERRIDES=", 0) == 0) { have_dll_overrides = true; }
+    }
     storage.emplace_back(std::string("WINEPREFIX=")  + opts->wine_prefix);
     storage.emplace_back(std::string("WINEARCH=")   + opts->wine_arch);
-    storage.emplace_back("WINEDEBUG=-all");                 // silence Wine's spam
-    storage.emplace_back("WINEDLLOVERRIDES=winemenubuilder.exe=d");
+    if (!has_winedebug) storage.emplace_back("WINEDEBUG=-all");
+    // Only supply the minimal override when the caller didn't — the app's
+    // own list already includes winemenubuilder.exe=d and the DXVK natives;
+    // a duplicate entry would shadow one of them (first match wins in
+    // getenv).
+    if (!have_dll_overrides) storage.emplace_back("WINEDLLOVERRIDES=winemenubuilder.exe=d");
     if (opts->wow64_enabled)  storage.emplace_back("WINEESYNC=1");
     if (opts->esync_enabled)  storage.emplace_back("WINEESYNC=1");
     if (opts->fsync_enabled)  storage.emplace_back("WINEFSYNC=1");
@@ -194,6 +224,18 @@ int launch_game(const LaunchOptions* opts) noexcept {
     };
     mkdir_p(opts->wine_prefix);
 
+    // The app passes the log file path via env (STRONGHOLDDROID_LOGFILE
+    // set by EnvironmentBuilder.buildEnvList) — extract it BEFORE the env
+    // vector goes to the child so the parent-side pump can tee into it.
+    std::string log_path;
+    for (size_t i = 0; i < opts->env_kv_count; ++i) {
+        const char* kv = opts->env_kv[i];
+        if (kv && strncmp(kv, "STRONGHOLDDROID_LOGFILE=", 24) == 0) {
+            log_path = kv + 24;
+            break;
+        }
+    }
+
     int stdout_pipe[2];
     if (pipe(stdout_pipe) != 0) {
         set_last_error("pipe() failed");
@@ -250,8 +292,8 @@ int launch_game(const LaunchOptions* opts) noexcept {
     // ----- parent -----
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
-    spawn_log_pump(stdout_pipe[0]);
-    spawn_log_pump(stderr_pipe[0]);
+    spawn_log_pump(stdout_pipe[0], log_path);
+    spawn_log_pump(stderr_pipe[0], log_path);
 
     int token = register_pid(PidInfo{
         .wine_pid = pid,

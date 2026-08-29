@@ -25,27 +25,33 @@ print_banner "StrongholdDroid full native build"
 START_TS=$(date +%s)
 
 # ---- Step 1: toolchain -----------------------------------------------------
-log "Step 1/6: ensure toolchain"
+log "Step 1/7: ensure toolchain"
 bash "$SCRIPTS_DIR/setup_toolchain.sh"
 
 # ---- Step 2: PulseAudio (Wine needs libpulse at link time) ----------------
-log "Step 2/6: build PulseAudio"
+log "Step 2/7: build PulseAudio"
 bash "$SCRIPTS_DIR/build_pulse.sh"
 
-# ---- Step 3: Wine (needs libpulse) ----------------------------------------
-log "Step 3/6: build Wine"
+# ---- Step 2.5: X11 client libraries (Wine display driver deps) ------------
+# MUST run before build_wine.sh — wine's configure consumes
+# prebuilt/arm64-v8a/xlibs/{include,lib} and builds winex11.drv from them.
+log "Step 2.5/7: build X11 client libraries"
+bash "$SCRIPTS_DIR/build_xlibs.sh"
+
+# ---- Step 3: Wine (needs libpulse + xlibs) ----------------------------------
+log "Step 3/7: build Wine"
 bash "$SCRIPTS_DIR/build_wine.sh"
 
 # ---- Step 4: box64 WoW64 cpu dll (32-bit x86 execution) --------------------
-log "Step 4/6: build box64 WoW64 cpu dll"
+log "Step 4/7: build box64 WoW64 cpu dll"
 bash "$SCRIPTS_DIR/build_box64.sh"
 
 # ---- Step 5: gl4es (fallback graphics) -------------------------------------
-log "Step 5/6: build gl4es (fallback graphics)"
+log "Step 5/7: build gl4es (fallback graphics)"
 bash "$SCRIPTS_DIR/build_gl4es.sh"
 
 # ---- Step 6: DXVK MinGW DLLs (needs mingw + glslang) -----------------------
-log "Step 6/6: build DXVK MinGW DLLs"
+log "Step 6/7: build DXVK MinGW DLLs"
 bash "$SCRIPTS_DIR/build_dxvk.sh"
 
 # ---- Validation ------------------------------------------------------------
@@ -59,6 +65,9 @@ EXPECTED=(
     "wine_dlls/aarch64-windows/kernel32.dll"
     "wine_dlls/i386-windows/kernel32.dll"
     "wine_dlls/aarch64-unix/ntdll.so"
+    "wine_dlls/aarch64-unix/winex11.so"
+    "x11-libs/libX11.so"
+    "x11-libs/libXext.so"
 )
 MISSING=0
 # libpulsecommon-<PA-version>.so — version-suffixed name, glob-match it.

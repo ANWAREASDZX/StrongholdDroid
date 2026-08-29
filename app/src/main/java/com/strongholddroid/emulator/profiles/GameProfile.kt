@@ -40,4 +40,19 @@ data class GameProfile(
     enum class GraphicsApi { DIRECT_X_7, DIRECT_X_9, DIRECT_X_9_EX }
 
     fun supportsHd(): Boolean = graphicsApi != GraphicsApi.DIRECT_X_7
+
+    /**
+     * The folder name inside drive_c where the game must be installed.
+     * Derived from [gameExecutable] (e.g. "C:\Stronghold Crusader\X.exe"
+     * → "Stronghold Crusader") so [com.strongholddroid.emulator.storage.GameInstaller]
+     * always writes to exactly the folder the launch path reads.
+     */
+    val installFolderName: String
+        get() = gameExecutable
+            .removePrefix("C:\\")
+            .substringBeforeLast('\\')
+
+    /** True when this exe name is a known SC game executable. */
+    fun isExecutableName(name: String): Boolean =
+        GameVersionDetector.isGameExecutable(name)
 }

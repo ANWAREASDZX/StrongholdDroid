@@ -208,18 +208,42 @@ object EnvironmentBuilder {
         // link against usr/lib/libpulse.so.0 and wined3d dlopens usr/lib/
         // libGL.so.1 (gl4es); the Android dynamic linker only finds them via
         // LD_LIBRARY_PATH (there is no ldconfig on Android).
+        // Since v0.2.0 it ALSO carries the X11 client libs (libX11.so, ...)
+        // that winex11.so NEEDs — without them the display driver cannot
+        // load and no window can ever open.
         list += "LD_LIBRARY_PATH" to "${usrDir(ctx)}/lib"
         list += "HOME" to cfg.winePrefix
         list += "TMPDIR" to ctx.cacheDir.absolutePath
+        // XDG_RUNTIME_DIR — CRITICAL: wineserver creates its socket at
+        // $XDG_RUNTIME_DIR/.wine-<uid> (falls back to /tmp which is NOT
+        // writable for an Android app).  Point it at our cache dir or
+        // every wine process dies at startup.
+        list += "XDG_RUNTIME_DIR" to ctx.cacheDir.absolutePath
         list += "XDG_DATA_HOME" to ctx.filesDir.absolutePath
+
+        // DISPLAY — the X server (XServer XSDL / Termux:X11) listens on
+        // TCP 127.0.0.1:6000 on the device.  wine's winex11.drv connects
+        // there to put the game on screen.
+        list += "DISPLAY" to (cfg.xDisplay.ifEmpty { "127.0.0.1:0" })
+
+        // Keep wineserver from looking at the system XDG dirs.
+        list += "WINEPREFIX" to cfg.winePrefix
 
         // Box64 config
         list += "BOX64_RCFILE" to "${ctx.filesDir}/box64/box64rc"
         list += "BOX64_LOG" to "0"
         list += cfg.box64Dynarec.toEnvList()
 
-        // Wine config — note we don't set WINEDEBUG here because the
-        // native launcher sets it to "-all" by default to silence noise.
+        // Wine config.  A diagnostic-friendly WINEDEBUG: errors from all
+        // channels (driver load failures, PE loader errors, ...) get
+        // captured by the native pump into filesDir/logs/wine.log so the
+        // in-app log viewer can explain launch failures.  The native side
+        // only falls back to -all when this var is absent.
+        list += "WINEDEBUG" to "err+all"
+
+        // Launch log tee target — wine_bridge.cpp extracts this and the
+        // pump threads append the child's stdout/stderr to the file.
+        list += "STRONGHOLDDROID_LOGFILE" to WineLog.currentLogPath(ctx)
 
         // Wine override list — forces the DXVK dlls we just staged
         // to be loaded as native, falling back to builtin if absent.
@@ -270,6 +294,9 @@ object EnvironmentBuilder {
         overrides += "dsound=builtin"
         // d3dcompiler_47 — needed for DXVK shader cross-compile
         overrides += "d3dcompiler_47=native,builtin"
+        // Suppress winemenubuilder (desktop menu integration) — pointless
+        // on Android and its failures pollute the log.
+        overrides += "winemenubuilder.exe=d"
         return overrides.joinToString(";")
     }
 
@@ -283,27 +310,37 @@ object EnvironmentBuilder {
         // Without it, every 32-bit process dies at startup.
         stageWow64CpuDll(ctx, cfg)
 
-        // wineboot is a separate arm64 ELF program shipped in the runtime
-        // asset (usr/bin/wineboot) — NOT `wine wineboot` (the wine CLI
-        // would spawn a full loader session just to run a prefix tool).
-        val wineboot = File(usrDir(ctx), "bin/wineboot")
-        if (!wineboot.canExecute()) {
-            throw IOException("wineboot missing at ${wineboot.absolutePath}")
+        // NOTE (v0.1.0 bug): this used to exec usr/bin/wineboot directly —
+        // but that file is a POSIX *shell script wrapper* (wine's
+        // apploader), which is at best unreliable on Android.  The correct
+        // invocation is `wine wineboot --init`: the wine LOADER resolves
+        // the wineboot.exe PE module from its builtin DLL directory.
+        val wineLoader = File(usrDir(ctx), "bin/wine")
+        if (!wineLoader.canExecute()) {
+            throw IOException("wine loader missing at ${wineLoader.absolutePath}")
         }
         val pb = ProcessBuilder(
-            wineboot.absolutePath, "--init", "--foreground"
+            wineLoader.absolutePath, "wineboot", "--init", "--foreground"
         ).apply {
             environment().putAll(buildEnvList(cfg).toMap())
             redirectErrorStream(true)
         }
         val proc = pb.start()
-        // Drain output to logcat
+        // Drain output to logcat AND to the launch log file so failures
+        // are visible to the user in-app (see WineLog.readTail).
+        val logFile = File(WineLog.currentLogPath(ctx))
+        logFile.parentFile?.mkdirs()
         val reader = proc.inputStream.bufferedReader()
         Thread {
-            reader.forEachLine { Log.d(TAG, "[wineboot] $it") }
+            reader.forEachLine {
+                Log.d(TAG, "[wineboot] $it")
+                synchronized(WineLog.LOCK) {
+                    runCatching { logFile.appendText("[wineboot] $it\n") }
+                }
+            }
         }.start()
         val rc = proc.waitFor()
-        if (rc != 0) error("wineboot failed with rc=$rc")
+        if (rc != 0) error("wineboot failed with rc=$rc — see ${logFile.absolutePath}")
 
         // Re-stage the wow64 cpu dll — wineboot's prefix creation may have
         // reset drive_c/windows/system32 between the two staging passes.
@@ -348,14 +385,53 @@ object EnvironmentBuilder {
             """.trimIndent()
         )
         if (profile.slug.startsWith("stronghold_crusader_v11")) {
-            // SC 1.1 specific tweaks — render at 16bpp via directdraw registry
+            // SC 1.1 specific tweaks — the GDI ddraw renderer is the safe
+            // path for the X11 display architecture: no desktop-GL context
+            // is required, all blits go through winex11 XPutImage.
+            // (v0.1.0 set "opengl" here, which cannot work without a GLX
+            // path — the game would black-screen.)
             userReg.appendText(
                 """
                 [Software\\Wine\\DirectDraw] ${System.currentTimeMillis()}
-                "DirectDrawRenderer"="opengl"
+                "DirectDrawRenderer"="gdi"
                 "DesktopStyle"="Maximized"
                 """.trimIndent()
             )
         }
+    }
+
+    /**
+     * Probes the X server TCP port (127.0.0.1:6000 — XServer XSDL /
+     * Termux:X11).  Wine (and wineboot!) cannot do anything useful when
+     * no display is reachable, so the UI checks this BEFORE launching and
+     * explains what to do instead of failing silently.
+     */
+    fun isXServerReachable(timeoutMs: Int = 400): Boolean =
+        try {
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress("127.0.0.1", 6000), timeoutMs)
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+}
+
+/** Tiny helper for the per-launch wine log file shared by the whole app. */
+object WineLog {
+    val LOCK = Any()
+
+    fun logDir(ctx: Context): File = File(ctx.filesDir, "logs").apply { mkdirs() }
+
+    fun currentLogPath(ctx: Context): String =
+        File(logDir(ctx), "wine.log").absolutePath
+
+    /** Last [maxLines] lines of the launch log — shown in the error dialog. */
+    fun readTail(ctx: Context, maxLines: Int = 100): String {
+        val f = File(currentLogPath(ctx))
+        if (!f.isFile) return "(no wine log yet)"
+        val lines = f.readLines()
+        return if (lines.size <= maxLines) lines.joinToString("\n")
+               else lines.takeLast(maxLines).joinToString("\n")
     }
 }

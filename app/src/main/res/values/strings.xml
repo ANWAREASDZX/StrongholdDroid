@@ -23,6 +23,39 @@
     <string name="fps_label">FPS</string>
     <string name="thermal_label">الحرارة</string>
 
+    <!-- Game install (Library) -->
+    <string name="install_button">تثبيت اللعبة</string>
+    <string name="status_installed">✓ مثبتة</string>
+    <string name="status_not_installed">✗ غير مثبتة — اضغط "تثبيت اللعبة" واختر مجلد اللعبة</string>
+    <string name="installing_game">جارٍ نسخ ملفات اللعبة… (قد يستغرق عدة دقائق)</string>
+    <string name="install_success">تم تثبيت %1$s بنجاح ✓</string>
+    <string name="install_failed_title">فشل التثبيت</string>
+    <string name="install_not_detected">لم يتم العثور على ملف لعبة Stronghold Crusader معروف في المجلد المحدد.\n\nتأكد من اختيار المجلد الذي يحتوي على ملف Stronghold_Crusader.exe (أو مجلد أبٍ له).</string>
+    <string name="install_error">حدث خطأ أثناء النسخ:\n%1$s</string>
+
+    <!-- X server hint (first launch) -->
+    <string name="xserver_hint_title">مطلوب تطبيق خادم عرض X</string>
+    <string name="xserver_hint_message">تعرض اللعبة عبر خادم X11 خارجي:\n\n1) ثبّت تطبيق "XServer XSDL" من متجر Google Play (مجاني)\n\n2) افتح XServer XSDL واتركه شغّالاً\n\n3) ارجع لهنا واضغط "تشغيل"\n\nتظهر اللعبة داخل شاشة XServer XSDL — بدّل بين التطبيقات من قائمة التطبيقات الأخيرة.</string>
+    <string name="xserver_hint_continue">فهمت — تشغيل اللعبة</string>
+    <string name="xserver_hint_never">لا تظهر مجدداً</string>
+
+    <!-- Launch phases (GameManagerActivity) -->
+    <string name="phase_idle">جاهز</string>
+    <string name="phase_extracting">جارٍ فك ضغط بيئة Wine (أول تشغيل فقط)…</string>
+    <string name="phase_prefix">جارٍ تهيئة بيئة Wine للمرة الأولى…</string>
+    <string name="phase_xserver_check">جارٍ التحقق من اتصال خادم X…</string>
+    <string name="phase_starting">جارٍ تشغيل اللعبة…</string>
+    <string name="phase_running">اللعبة تعمل — شاهد الشاشة في تطبيق خادم X (XServer XSDL)</string>
+    <string name="phase_failed">فشل التشغيل</string>
+    <string name="launch_failed_title">فشل تشغيل اللعبة</string>
+    <string name="view_wine_log">عرض سجل Wine</string>
+    <string name="retry_launch">إعادة المحاولة</string>
+    <string name="stop_game">إيقاف اللعبة</string>
+    <string name="no_xserver_title">خادم X غير متصل</string>
+    <string name="no_xserver_message">لم يتم العثور على خادم X على المنفذ 6000.\n\n1) ثبّت وافتح تطبيق XServer XSDL أولاً\n2) ارجع لهذا التطبيق واضغط "تشغيل" مجدداً\n\nهل تريد المتابعة على أي حال؟ (اللعبة لن تظهر أي شاشة)</string>
+    <string name="continue_anyway">متابعة على أي حال</string>
+    <string name="wine_log_title">سجل Wine (آخر 100 سطر)</string>
+
     <!-- Settings categories -->
     <string name="cat_graphics">الرسوميات</string>
     <string name="cat_performance">الأداء</string>

@@ -61,5 +61,15 @@ class GameVersionDetector {
         private const val EXE_EXTREME_SP  = "Stronghold Crusader Extreme.exe"
         private const val EXE_HD_US        = "Stronghold_CrusaderHD.exe"
         private const val EXE_HD_SP        = "Stronghold CrusaderHD.exe"
+
+        private val ALL_EXES = setOf(
+            EXE_V11_US, EXE_V11_SP,
+            EXE_EXTREME_US, EXE_EXTREME_SP,
+            EXE_HD_US, EXE_HD_SP,
+        )
+
+        /** True when [name] is one of the known SC game executables. */
+        fun isGameExecutable(name: String): Boolean =
+            name in ALL_EXES || ALL_EXES.any { it.equals(name, ignoreCase = true) }
     }
 }

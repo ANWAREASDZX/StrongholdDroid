@@ -85,6 +85,26 @@ class MainActivity : AppCompatActivity() {
 
     /** Called from LibraryFragment's "Launch" button. */
     fun launchGame(profileSlug: String, saveSlot: Int = -1) {
+        // Wine renders through an external X server (XServer XSDL /
+        // Termux:X11 on TCP 6000).  When it is not running, wineboot and
+        // the game both die silently — check FIRST and explain instead.
+        if (!com.strongholddroid.emulator.emulator.EnvironmentBuilder
+                .isXServerReachable())
+        {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.no_xserver_title)
+                .setMessage(R.string.no_xserver_message)
+                .setPositiveButton(R.string.continue_anyway) { _, _ ->
+                    startEmulator(profileSlug, saveSlot)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        startEmulator(profileSlug, saveSlot)
+    }
+
+    private fun startEmulator(profileSlug: String, saveSlot: Int) {
         lifecycleScope.launch {
             StrongholdDroidApp.instance.let {
                 EmulatorService.start(it, profileSlug, saveSlot)

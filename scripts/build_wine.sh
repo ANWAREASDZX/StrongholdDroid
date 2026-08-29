@@ -17,10 +17,14 @@
 #      box64's wow64 cpu dll (wowbox64.dll, staged as xtajit.dll at
 #      runtime), built by build_box64.sh — NOT by running wine under the
 #      box64 executable.
-#   3. There is no X server; graphics go through the GLES/Vulkan path
-#      (DXVK/gl4es).  Wine links against the stub libpulse.so we ship
-#      (build_pulse.sh); the AudioBridge on the Kotlin side owns the sink
-#      end of the FIFO and forwards to AAudio.
+#   3. DISPLAY: winex11.drv (built via --with-x + build_xlibs.sh) renders
+#      into an X server the user runs on the device (XServer XSDL or
+#      Termux:X11, reachable at 127.0.0.1:6000).  DirectDraw uses the GDI
+#      renderer (set in EnvironmentBuilder registry tweaks) so no GL path
+#      is required for Stronghold Crusader.
+#      Wine links against the stub libpulse.so we ship (build_pulse.sh);
+#      the AudioBridge on the Kotlin side owns the sink end of the FIFO
+#      and forwards to AAudio.
 #
 # Android/bionic patches live in scripts/patches/wine/*.patch and are
 # applied by apply_patches() below (posix_spawn is absent from bionic
@@ -77,10 +81,13 @@ apply_patches
 
 # ---- Configure -------------------------------------------------------------
 # We disable everything we don't need for SC:
-#   • No X11 / Wayland / GTK — graphics go through GLES/Vulkan
+#   • --with-x — CRITICAL: builds winex11.drv (the display driver).  Without
+#     it wine cannot open ANY window and every GUI app (and wineboot)
+#     dies silently.  The X11 client libs come from build_xlibs.sh.
+#   • No Wayland / GTK — XSDL is the display target
 #   • No CUPS / SANE / libcapi20 — printing/scanning not needed
-#   • No OSMesa / Vulkan-loader (we ship our own vulkan)
-#   • Static libpulse linking against our stub build
+#   • ddraw uses the GDI renderer (see EnvironmentBuilder) so desktop GL
+#     is not required — keep --without-opengl to minimize build risk
 #
 # IMPORTANT: Wine's configure REQUIRES --with-wine-tools=DIR when
 # cross-compiling.  The "wine tools" (winebuild, wrc, wmc, widl, etc.)
@@ -171,6 +178,16 @@ else
 # "PE cross-compilation is required for ARM64, please install
 #  clang/llvm-dlltool/lld, or llvm-mingw."  Wine 9.0 needs NO external
 # `dlltool` for its own PE build (winebuild emits import libraries itself).
+#
+# X11 paths point at the xlibs sysroot built by build_xlibs.sh (which MUST
+# run before this script — see build_all.sh step 2.5).  X_CFLAGS/X_LIBS are
+# consumed by wine's X checks; CPPFLAGS/LDFLAGS make them visible to every
+# other check as well.
+XLIBS_SYSROOT="$PREBUILT_DIR/arm64-v8a/xlibs"
+if [[ ! -e "$XLIBS_SYSROOT/lib/libX11.so" ]]; then
+    die "X11 libs not found at $XLIBS_SYSROOT — run scripts/build_xlibs.sh first (see build_all.sh)."
+fi
+
 "$WINE_SRC/configure" \
     --host="aarch64-linux-android" \
     --build="x86_64-pc-linux-gnu" \
@@ -178,7 +195,7 @@ else
     --enable-archs="aarch64,i386" \
     --with-wine-tools="$WINE_NATIVE_BUILD" \
     --disable-wineandroid.drv \
-    --without-x \
+    --with-x \
     --without-wayland \
     --without-opengl \
     --without-vulkan \
@@ -193,12 +210,14 @@ else
     --without-coreaudio \
     --without-freetype \
     --without-fontconfig \
-    PKG_CONFIG_PATH="$WINE_OUT/lib/pkgconfig" \
-    PKG_CONFIG_LIBDIR="$WINE_OUT/lib/pkgconfig" \
+    X_CFLAGS="-I$XLIBS_SYSROOT/include" \
+    X_LIBS="-L$XLIBS_SYSROOT/lib" \
+    PKG_CONFIG_PATH="$XLIBS_SYSROOT/lib/pkgconfig:$XLIBS_SYSROOT/share/pkgconfig:$WINE_OUT/lib/pkgconfig" \
+    PKG_CONFIG_LIBDIR="$XLIBS_SYSROOT/lib/pkgconfig:$XLIBS_SYSROOT/share/pkgconfig:$WINE_OUT/lib/pkgconfig" \
     PULSE_CFLAGS="-I$WINE_OUT/include" \
     PULSE_LIBS="-L$WINE_OUT/lib -lpulse" \
-    CPPFLAGS="-I$WINE_OUT/include" \
-    LDFLAGS="-L$WINE_OUT/lib -static-libstdc++"
+    CPPFLAGS="-I$XLIBS_SYSROOT/include -I$WINE_OUT/include" \
+    LDFLAGS="-L$XLIBS_SYSROOT/lib -L$WINE_OUT/lib -static-libstdc++"
 
 fi   # configure-if-needed
 
@@ -212,8 +231,15 @@ fi   # configure-if-needed
 #
 # --without-freetype / --without-fontconfig: cross-compile for Android
 # can't see the host's freetype/fontconfig dev files (and Android
-# doesn't ship them either).  Fonts will be loaded from the device's
-# /system/fonts at runtime via Android's Typeface.
+# doesn't ship them either).  Wine's own bitmap fonts (fonts/*.fon built
+# by sfnt2fon from the bundled .ttf sources) are installed to
+# $WINE_OUT/usr/share/wine/fonts and staged into the APK by build_apk.sh —
+# game dialogs and wine message boxes use them.
+#
+# --with-x was validated locally (NDK r26b + llvm-mingw 20240619): wine's
+# configure detects all 10 X libs with unversioned SONAMEs (libX11.so,
+# libXext.so, ...) matching exactly what build_xlibs.sh ships, and
+# winex11.drv compiles for both the aarch64-unix and PE layers.
 #
 # PKG_CONFIG_LIBDIR + PULSE_CFLAGS + PULSE_LIBS: Wine's
 # WINE_PACKAGE_FLAGS(PULSE, ...) macro calls pkg-config to get the
@@ -277,4 +303,29 @@ log_ok "Wine built: wine ($(file "$WINE_INSTALL/bin/wine" | cut -d: -f2 | cut -c
 log_ok "  PE dlls:  $(ls "$WINE_OUT/wine_dlls/aarch64-windows" | wc -l) aarch64, $(ls "$WINE_OUT/wine_dlls/i386-windows" | wc -l) i386"
 log_ok "  unixlib:  $(ls "$WINE_OUT/wine_dlls/aarch64-unix" | wc -l) .so"
 log_ok "  dlls size: $(du -sh "$WINE_OUT/wine_dlls" | cut -f1)"
+
+# ---- Verify the display driver made it in -----------------------------------
+# winex11.so MUST be present in the unix libs — without it the game can
+# never open a window (the exact bug that made v0.1.0 unusable).
+if [[ ! -f "$WINE_OUT/wine_dlls/aarch64-unix/winex11.so" ]]; then
+    die "winex11.so missing from the staged unix libs — X11 support did not get compiled!"
+fi
+log_ok "  display driver: winex11.so ✓ ($(du -h "$WINE_OUT/wine_dlls/aarch64-unix/winex11.so" | cut -f1))"
+
+# ---- Stage the X11 client libs next to the runtime --------------------------
+# wine dlopens winex11.so which NEEDs libX11.so / libXext.so etc. — they
+# must be in the prebuilt tree so build_apk.sh packs them into usr/lib
+# (the app sets LD_LIBRARY_PATH=<filesDir>/usr/lib).
+log "Staging X11 client libraries ..."
+mkdir -p "$WINE_OUT/x11-libs"
+for f in libX11.so libX11-xcb.so libxcb.so libXau.so libXdmcp.so libXext.so \
+         libXrender.so libXfixes.so libXcursor.so libXrandr.so libXinerama.so \
+         libXcomposite.so libXxf86vm.so libXi.so; do
+    if [[ -e "$XLIBS_SYSROOT/lib/$f" ]]; then
+        cp -fL "$XLIBS_SYSROOT/lib/$f" "$WINE_OUT/x11-libs/$f"
+    else
+        warn "  X11 lib not staged (missing): $f"
+    fi
+done
+log_ok "  X11 libs staged: $(ls "$WINE_OUT/x11-libs" | wc -l) files"
 print_banner "Wine build complete ✓"
