@@ -2,6 +2,7 @@ package com.strongholddroid.emulator.emulator
 
 import android.content.Context
 import android.util.Log
+import com.strongholddroid.emulator.BuildConfig
 import com.strongholddroid.emulator.StrongholdDroidApp
 import com.strongholddroid.emulator.profiles.GameProfile
 import com.strongholddroid.emulator.profiles.StrongholdCrusaderProfile
@@ -35,7 +36,12 @@ import java.util.zip.ZipInputStream
  *   usr/lib/libpulse.so.0    ← pulse stub wine's winepulse.drv links
  *   usr/lib/libpulsecommon-XX.so
  *   usr/lib/libGL.so.1       ← gl4es (GL → GLES translation for wined3d)
- *   usr/share/wine/nls/      ← locale/codepage tables
+ *   share/wine/nls/          ← locale/codepage tables (data_dir — see
+ *                              build_apk.sh: wine resolves data_dir to
+ *                              <filesDir>/share/wine from the usr/bin
+ *                              binary location, NOT usr/share/wine)
+ *   share/wine/fonts/        ← wine bitmap fonts (vgasys.fon, ...) —
+ *                              dialogs/GDI stock text render blank without them
  *   wow64/wowbox64.dll       ← box64 WoW64 cpu dll (arm64 PE)
  *   dxvk-wine-dlls/          <- 32-bit DXVK dlls
  *   prefixes/<slug>/         ← per-game WINEPREFIX
@@ -66,12 +72,20 @@ object EnvironmentBuilder {
      * Contents: usr/bin (wine, wineserver, wineboot, ... — all arm64 ELF),
      * usr/lib/wine/{aarch64-unix,aarch64-windows,i386-windows},
      * usr/lib/{libpulse.so.0,libpulsecommon-XX.so,libGL.so.1},
-     * usr/share/wine/nls, wow64/wowbox64.dll, dxvk-wine-dlls/.
+     * share/wine/{nls,fonts}, wow64/wowbox64.dll, dxvk-wine-dlls/.
      */
     fun ensureFirstRunExtraction(ctx: Context) {
+        // The marker records the runtime layout + app version it was extracted
+        // from.  When a new APK ships a different prebuilt.zip (layout change,
+        // wine rebuild, new X11 libs/fonts) the marker no longer matches and
+        // the runtime is re-extracted over the old one — otherwise an app
+        // upgrade would keep running the STALE runtime from the previous
+        // install (exactly what happened upgrading v0.1.0 → v0.1.1).
+        val runtimeVersion = "v2:${BuildConfig.VERSION_CODE}"  // v2 = share/wine layout
         val marker = File(ctx.filesDir, ".runtime-extracted")
         val wineBin = File(usrDir(ctx), "bin/wine")
-        if (marker.exists() && wineBin.canExecute()) return
+        if (marker.exists() && wineBin.canExecute() &&
+            marker.readText().contains("runtime=$runtimeVersion")) return
 
         Log.i(TAG, "Extracting wine runtime from assets/prebuilt.zip ...")
         val start = System.currentTimeMillis()
@@ -107,7 +121,7 @@ object EnvironmentBuilder {
         if (!wineBin.canExecute()) {
             throw IOException("usr/bin/wine missing after extraction")
         }
-        marker.writeText("extracted-at=${System.currentTimeMillis()}\n")
+        marker.writeText("runtime=$runtimeVersion\nextracted-at=${System.currentTimeMillis()}\n")
         Log.i(TAG, "Runtime extracted in ${System.currentTimeMillis() - start} ms")
     }
 

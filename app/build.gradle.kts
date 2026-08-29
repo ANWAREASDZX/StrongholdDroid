@@ -25,8 +25,8 @@ android {
         applicationId = "com.strongholddroid.emulator"
         minSdk = 26          // Android 8.0+ — required for AAudio + Vulkan 1.1
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0-alpha"
+        versionCode = 2
+        versionName = "0.1.2"
 
         // StrongholdDroid ships with native bridges that wrap libwine/libbox64.
         // The prebuilt libs for these are NOT in the repo (too large) —

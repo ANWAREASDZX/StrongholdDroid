@@ -328,4 +328,57 @@ for f in libX11.so libX11-xcb.so libxcb.so libXau.so libXdmcp.so libXext.so \
     fi
 done
 log_ok "  X11 libs staged: $(ls "$WINE_OUT/x11-libs" | wc -l) files"
+
+# ---- Bitmap fonts (host-native side build) ----------------------------------
+# Wine's builtin bitmap fonts (vgasys.fon, sserife.fon, smalle.fon, ...) are
+# generated from fonts/*.ttf by tools/sfnt2fon — a HOST tool that links
+# against libfreetype (tools/sfnt2fon/Makefile.in: UNIX_LIBS = $(FREETYPE_LIBS)).
+# Our cross-configure above must pass --without-freetype (Android target has
+# no freetype), which sets enable_fonts=no and silently skips the whole
+# fonts/ dir — v0.1.1 shipped without fonts, so every wine message box and
+# every GDI stock-font text rendered BLANK.
+# The build container already ships libfreetype6-dev (see Dockerfile.build),
+# so configure a second NATIVE x86_64 tree with the container's own gcc and
+# build ONLY sfnt2fon + fonts (~30 s, no X/pulse needed).  The .fon files
+# are architecture-independent data, valid for the aarch64 runtime.
+# Verified locally against wine-9.0: configure finds libfreetype.so.6,
+# `make -C tools/sfnt2fon && make -C fonts` yields 50 .fon + 6 .ttf.
+log "Building Wine bitmap fonts (native host tree)..."
+FONT_BUILD="$BUILD_DIR/wine-fonts-native"
+mkdir -p "$FONT_BUILD"
+(
+    cd "$FONT_BUILD"
+    # Neutralize the NDK cross-exports from setup_android_env — the native
+    # tree MUST compile with the container's own gcc, not the NDK clang.
+    env -u CC -u CXX -u AR -u RANLIB -u STRIP \
+        -u CFLAGS -u CXXFLAGS -u LDFLAGS -u CPPFLAGS \
+        -u PKG_CONFIG_PATH -u PKG_CONFIG_LIBDIR \
+        CC=gcc CXX=g++ \
+        "$WINE_SRC/configure" \
+            --enable-win64 \
+            --without-x --without-pulse --without-alsa --without-oss \
+            --without-sane --without-usb --without-capi --without-netapi \
+            --without-gstreamer --without-sdl \
+            --disable-win16 --disable-tests
+    # The `env -u` shields configure from the NDK cross-exports; the
+    # explicit CC/CXX on the make command line is defense-in-depth in case
+    # anything re-exports them (Makefile vars normally win over env, but a
+    # command-line override removes all doubt).
+    make -j"$(nproc)" -C tools/sfnt2fon CC=gcc CXX=g++
+    make -j"$(nproc)" -C fonts CC=gcc CXX=g++
+) || die "native fonts build failed"
+FONTS_OUT="$WINE_OUT/usr/share/wine/fonts"
+mkdir -p "$FONTS_OUT"
+cp -f  "$FONT_BUILD/fonts/"*.fon "$FONTS_OUT/"
+# .ttf (tahoma, marlett, symbol, webdings, wingding) are symlinks into the
+# source tree in an out-of-tree build — cp -L dereferences them.
+cp -fL "$FONT_BUILD/fonts/"*.ttf "$FONTS_OUT/"
+FONT_COUNT=$(ls -1 "$FONTS_OUT" | wc -l)
+log_ok "  bitmap fonts staged: $FONT_COUNT files ($(du -sh "$FONTS_OUT" | cut -f1))"
+# Wine references these three names from its registry (wine.inf font
+# substitutions) — their absence means blank text in wine dialogs.
+for must in vgasys.fon sserife.fon smalle.fon; do
+    [[ -f "$FONTS_OUT/$must" ]] || die "bitmap font $must missing after build"
+done
+
 print_banner "Wine build complete ✓"

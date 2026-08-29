@@ -112,16 +112,34 @@ cp -af "$PRE/wine_dlls/aarch64-unix"     "$RUNTIME_STAGE/usr/lib/wine/"
 cp -af "$PRE/wine_dlls/aarch64-windows"  "$RUNTIME_STAGE/usr/lib/wine/"
 cp -af "$PRE/wine_dlls/i386-windows"     "$RUNTIME_STAGE/usr/lib/wine/"
 
-# 4. NLS data + FONTS (wine loads locale/codepage tables and its bitmap
-#    fonts from here at runtime — without fonts, wine message boxes and
-#    game dialogs render no text at all).
-cp -af "$PRE/usr/share/wine/nls" "$RUNTIME_STAGE/usr/share/wine/" 2>/dev/null \
-    || warn "wine nls dir not found in install tree"
+# 4. NLS data + FONTS.
+#    ⚠ LAYOUT RULE — wine 9.0 computes its data dir AT RUNTIME from the
+#    ntdll.so / wine-binary location (dlls/ntdll/unix/loader.c:init_paths):
+#        bin_dir  = <dir of usr/lib/wine> + DLL_TO_BINDIR   ("../../bin")
+#        data_dir = bin_dir + BIN_TO_DATADIR                ("../../share/wine")
+#    Our runtime layout puts the binary at usr/bin and the unix libs at
+#    usr/lib/wine — so wine resolves data_dir to <filesDir>/share/wine.
+#    The shared data MUST therefore live at share/wine (NOT usr/share/wine,
+#    which is where `make install` puts it for a desktop prefix; v0.1.1
+#    shipped it under usr/share and wine could never find the NLS tables
+#    or the fonts — ntdll's get_nls_file_path() and win32u's font loader
+#    both read <data_dir>/nls and <data_dir>/fonts).
+#    Without the NLS tables wineboot --init fails outright; without fonts,
+#    wine message boxes and game dialogs render no text at all.
+mkdir -p "$RUNTIME_STAGE/share/wine"
+cp -af "$PRE/usr/share/wine/nls" "$RUNTIME_STAGE/share/wine/" 2>/dev/null \
+    || die "wine nls dir not found in install tree"
+NLS_COUNT=$(ls "$RUNTIME_STAGE/share/wine/nls"/*.nls 2>/dev/null | wc -l)
+[[ "$NLS_COUNT" -ge 70 ]] || die "wine nls tables incomplete ($NLS_COUNT < 70)"
 if [[ -d "$PRE/usr/share/wine/fonts" ]]; then
-    cp -af "$PRE/usr/share/wine/fonts" "$RUNTIME_STAGE/usr/share/wine/"
-    log_ok "  wine fonts packaged: $(ls "$RUNTIME_STAGE/usr/share/wine/fonts" | wc -l) files"
+    cp -af "$PRE/usr/share/wine/fonts" "$RUNTIME_STAGE/share/wine/"
+    FONT_PKG_COUNT=$(ls "$RUNTIME_STAGE/share/wine/fonts" | wc -l)
+    log_ok "  wine data dir (share/wine): $NLS_COUNT nls + $FONT_PKG_COUNT font files"
+    # v0.1.1 shipped with zero fonts — wine dialogs showed blank text.
+    # Now a hard error: build_wine.sh guarantees the fonts dir exists.
+    [[ "$FONT_PKG_COUNT" -ge 10 ]] || die "wine fonts partially packaged ($FONT_PKG_COUNT < 10)"
 else
-    warn "wine fonts dir not found in install tree — wine dialogs will show no text"
+    die "wine fonts dir not found in install tree — build_wine.sh fonts stage failed"
 fi
 
 # 5. box64 wow64 cpu dll + DXVK dlls.

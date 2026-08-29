@@ -68,6 +68,10 @@ EXPECTED=(
     "wine_dlls/aarch64-unix/winex11.so"
     "x11-libs/libX11.so"
     "x11-libs/libXext.so"
+    "usr/share/wine/fonts/vgasys.fon"
+    "usr/share/wine/fonts/sserife.fon"
+    "usr/share/wine/fonts/smalle.fon"
+    "usr/share/wine/fonts/tahoma.ttf"
 )
 MISSING=0
 # libpulsecommon-<PA-version>.so — version-suffixed name, glob-match it.
@@ -80,6 +84,12 @@ fi
 DXVK_COUNT=$(ls "$PREBUILT_DIR/arm64-v8a/dxvk-wine-dlls/"*.dll 2>/dev/null | wc -l)
 if [[ "$DXVK_COUNT" -eq 0 ]]; then
     warn "  MISSING: dxvk-wine-dlls/*.dll"
+    MISSING=$((MISSING+1))
+fi
+# Bitmap fonts — wine dialogs render blank text without them (v0.1.1 bug).
+FONTS_COUNT=$(ls "$PREBUILT_DIR/arm64-v8a/usr/share/wine/fonts/"*.fon 2>/dev/null | wc -l)
+if [[ "$FONTS_COUNT" -lt 10 ]]; then
+    warn "  MISSING: usr/share/wine/fonts/*.fon (only $FONTS_COUNT found — need >=10)"
     MISSING=$((MISSING+1))
 fi
 for f in "${EXPECTED[@]}"; do
