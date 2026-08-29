@@ -265,8 +265,10 @@ for lib in libX11.so libxcb.so libXau.so libXdmcp.so libXext.so \
 done
 
 # Verify they really are arm64 ELF (not accidentally host binaries).
+# Use readelf (from binutils/build-essential) instead of `file` which is not
+# installed in the build container.
 for f in "$XLIBS_OUT"/lib/*.so; do
-    file "$f" | grep -q "ARM aarch64" || die "$f is not an arm64 ELF!"
+    readelf -h "$f" 2>/dev/null | grep -q "Machine:.*AArch64" || die "$f is not an arm64 ELF!"
 done
 
 log "  X11 libs total size: $(du -sh "$XLIBS_OUT/lib" | cut -f1)"
