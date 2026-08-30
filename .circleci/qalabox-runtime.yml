@@ -1,0 +1,50 @@
+version: 2.1
+
+# ============================================================
+# بناء حزمة وقت التشغيل qalabox-runtime.qbxruntime كاملة
+# السكربت: runtime-src/build_runtime_package.sh في مستودع QalaBox العام
+# جذر Debian (حل اعتماديات مباشر) + Wine + Box64/Box86 + qalarender + proot
+# ============================================================
+
+jobs:
+  runtime:
+    docker:
+      - image: cimg/base:current
+    environment:
+      TERM: xterm
+    steps:
+      - run:
+          name: "سحب مصدر QalaBox"
+          command: |
+            git clone --depth 1 https://github.com/ANWAREASDZX/QalaBox.git /tmp/qalabox
+            git -C /tmp/qalabox log --oneline -1
+
+      - run:
+          name: "تثبيت أدوات البناء المتقاطع"
+          command: |
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends \
+              cmake g++-aarch64-linux-gnu g++-arm-linux-gnueabihf \
+              git curl xz-utils unzip zip python3
+
+      - run:
+          name: "بناء الحزمة الكاملة (rootfs + Wine + Box86/64 + proot)"
+          command: |
+            bash /tmp/qalabox/runtime-src/build_runtime_package.sh /tmp/out
+
+      - store_artifacts:
+          path: /tmp/out/qalabox-runtime.qbxruntime
+          destination: qalabox-runtime.qbxruntime
+
+      - store_artifacts:
+          path: /tmp/out/build-manifest.txt
+          destination: build-manifest.txt
+
+      - store_artifacts:
+          path: /tmp/out/version.json
+          destination: version.json
+
+workflows:
+  runtime-build:
+    jobs:
+      - runtime
